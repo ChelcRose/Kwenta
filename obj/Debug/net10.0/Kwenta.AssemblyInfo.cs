@@ -10,10 +10,11 @@
 using System;
 using System.Reflection;
 
+[assembly: Microsoft.Extensions.Configuration.UserSecrets.UserSecretsIdAttribute("aspnet-Kwenta-61c2f620-4fc1-4605-ac68-7150f4cdcd41")]
 [assembly: System.Reflection.AssemblyCompanyAttribute("Kwenta")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+a08d6919380a5023d739109713b7c5001feb558e")]
 [assembly: System.Reflection.AssemblyProductAttribute("Kwenta")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Kwenta")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

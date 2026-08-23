@@ -1,0 +1,275 @@
+@page "/income/add"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using System.ComponentModel.DataAnnotations
+@using System.Globalization
+@using Kwenta.Data
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Db
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<h3>Add Income</h3>
+
+@if (accounts.Count == 0)
+{
+    <p>Create an active financial account before adding income.</p>
+}
+
+<EditForm Model="income" OnValidSubmit="SaveIncome" FormName="AddIncome">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    @if (!string.IsNullOrWhiteSpace(saveError))
+    {
+        <p role="alert">@saveError</p>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(successMessage))
+    {
+        <p role="status">@successMessage</p>
+    }
+
+    <div>
+        <label for="income-amount">Amount</label>
+        <InputNumber id="income-amount" @bind-Value="income.Amount" step="0.01" />
+        <ValidationMessage For="@(() => income.Amount)" />
+    </div>
+
+    <div>
+        <label for="income-account">Receiving Financial Account</label>
+        <InputSelect id="income-account" @bind-Value="income.AccountId">
+            <option value="">Select an account</option>
+            @foreach (var account in accounts)
+            {
+                <option value="@account.Id">@account.Name</option>
+            }
+        </InputSelect>
+        <ValidationMessage For="@(() => income.AccountId)" />
+    </div>
+
+    <div>
+        <label for="income-category">Income Category</label>
+        <InputSelect id="income-category" @bind-Value="income.CategoryId">
+            <option value="">Select a category</option>
+            @foreach (var category in incomeCategories)
+            {
+                <option value="@category.Id">@category.Name</option>
+            }
+        </InputSelect>
+        <ValidationMessage For="@(() => income.CategoryId)" />
+    </div>
+
+    <div>
+        <label for="income-source">Source</label>
+        <InputText id="income-source" @bind-Value="income.Source" />
+        <ValidationMessage For="@(() => income.Source)" />
+    </div>
+
+    <div>
+        <label for="income-date">Date</label>
+        <InputDate id="income-date" @bind-Value="income.Date" />
+        <ValidationMessage For="@(() => income.Date)" />
+    </div>
+
+    <div>
+        <label for="income-description">Description (optional)</label>
+        <InputTextArea id="income-description" @bind-Value="income.Description" />
+    </div>
+
+    <button type="submit" disabled="@(accounts.Count == 0)">Add Income</button>
+</EditForm>
+
+<hr />
+
+<h4>Recent Income</h4>
+
+@if (recentIncome.Count == 0)
+{
+    <p>No income yet.</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr>
+                <th>Amount</th>
+                <th>Category</th>
+                <th>Account</th>
+                <th>Date</th>
+                <th>Source</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var transaction in recentIncome)
+            {
+                <tr>
+                    <td>@FormatPeso(transaction.Amount)</td>
+                    <td>@transaction.Category.Name</td>
+                    <td>@transaction.FinancialAccount.Name</td>
+                    <td>@transaction.Date.ToString("MMM d, yyyy", CultureInfo.GetCultureInfo("en-PH"))</td>
+                    <td>@transaction.Merchant</td>
+                    <td>@(string.IsNullOrWhiteSpace(transaction.Description) ? "—" : transaction.Description)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private IncomeInput income = NewIncome();
+    private List<FinancialAccount> accounts = [];
+    private List<Category> incomeCategories = [];
+    private List<Transaction> recentIncome = [];
+    private string? saveError;
+    private string? successMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var userId = await GetCurrentUserId();
+
+        if (userId is null)
+            return;
+
+        accounts = await Db.FinancialAccounts
+            .Where(account => account.UserId == userId && !account.IsArchived)
+            .OrderBy(account => account.Name)
+            .ToListAsync();
+
+        incomeCategories = await Db.Categories
+            .Where(category => category.IsDefault && category.Type == CategoryType.Income)
+            .OrderBy(category => category.Name)
+            .ToListAsync();
+
+        await LoadRecentIncome(userId);
+    }
+
+    private async Task SaveIncome()
+    {
+        saveError = null;
+        successMessage = null;
+
+        var userId = await GetCurrentUserId();
+
+        if (userId is null)
+        {
+            saveError = "You must be logged in to add income.";
+            return;
+        }
+
+        var accountExists = await Db.FinancialAccounts.AnyAsync(account =>
+            account.Id == income.AccountId &&
+            account.UserId == userId &&
+            !account.IsArchived);
+
+        if (!accountExists)
+        {
+            saveError = "Select one of your active financial accounts.";
+            return;
+        }
+
+        var categoryExists = await Db.Categories.AnyAsync(category =>
+            category.Id == income.CategoryId &&
+            category.IsDefault &&
+            category.Type == CategoryType.Income);
+
+        if (!categoryExists)
+        {
+            saveError = "Select a valid default income category.";
+            return;
+        }
+
+        var transaction = new Transaction
+        {
+            UserId = userId,
+            AccountId = income.AccountId!.Value,
+            CategoryId = income.CategoryId!.Value,
+            Type = TransactionType.Income,
+            Amount = income.Amount!.Value,
+            Date = income.Date!.Value,
+            Merchant = income.Source.Trim(),
+            Description = string.IsNullOrWhiteSpace(income.Description)
+                ? null
+                : income.Description.Trim()
+        };
+
+        Db.Transactions.Add(transaction);
+        await Db.SaveChangesAsync();
+
+        income = NewIncome();
+        successMessage = "Income added.";
+
+        await LoadRecentIncome(userId);
+    }
+
+    private async Task LoadRecentIncome(string userId)
+    {
+        recentIncome = await Db.Transactions
+            .AsNoTracking()
+            .Include(transaction => transaction.Category)
+            .Include(transaction => transaction.FinancialAccount)
+            .Where(transaction =>
+                transaction.UserId == userId &&
+                transaction.FinancialAccount.UserId == userId &&
+                transaction.Type == TransactionType.Income)
+            .OrderByDescending(transaction => transaction.Date)
+            .ThenByDescending(transaction => transaction.Id)
+            .Take(10)
+            .ToListAsync();
+    }
+
+    private async Task<string?> GetCurrentUserId()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return authState.User
+            .FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    }
+
+    private static IncomeInput NewIncome() => new()
+    {
+        Date = DateOnly.FromDateTime(DateTime.Today)
+    };
+
+    private static string FormatPeso(decimal amount) =>
+        $"₱{amount.ToString("N2", CultureInfo.GetCultureInfo("en-PH"))}";
+
+    private sealed class IncomeInput : IValidatableObject
+    {
+        [Required(ErrorMessage = "Amount is required.")]
+        [Range(typeof(decimal), "0.01", "999999999999.99",
+            ErrorMessage = "Amount must be greater than zero.")]
+        public decimal? Amount { get; set; }
+
+        [Required(ErrorMessage = "Receiving financial account is required.")]
+        public int? AccountId { get; set; }
+
+        [Required(ErrorMessage = "Income category is required.")]
+        public int? CategoryId { get; set; }
+
+        [Required(ErrorMessage = "Source is required.")]
+        public string Source { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Date is required.")]
+        public DateOnly? Date { get; set; }
+
+        public string? Description { get; set; }
+
+        public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+        {
+            if (!string.IsNullOrEmpty(Source) && string.IsNullOrWhiteSpace(Source))
+            {
+                yield return new ValidationResult(
+                    "Source is required.",
+                    [nameof(Source)]);
+            }
+
+            if (Amount is decimal amount && decimal.Round(amount, 2) != amount)
+            {
+                yield return new ValidationResult(
+                    "Amount can have at most two decimal places.",
+                    [nameof(Amount)]);
+            }
+        }
+    }
+}

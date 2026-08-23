@@ -1,0 +1,220 @@
+@page "/accounts"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using System.ComponentModel.DataAnnotations
+@using System.Globalization
+@using Kwenta.Data
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Db
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<h3>Accounts</h3>
+
+<EditForm Model="account" OnValidSubmit="SaveAccount" FormName="AddAccount">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div>
+        <label for="account-name">Name</label>
+        <InputText id="account-name" @bind-Value="account.Name" />
+        <ValidationMessage For="@(() => account.Name)" />
+    </div>
+
+    <div>
+        <label for="account-type">Account Type</label>
+        <InputSelect id="account-type" @bind-Value="account.AccountType">
+            <option value="">Select an account type</option>
+            @foreach (var accountType in AccountTypes)
+            {
+                <option value="@accountType">@accountType</option>
+            }
+        </InputSelect>
+        <ValidationMessage For="@(() => account.AccountType)" />
+    </div>
+
+    <div>
+        <label for="provider">Provider (optional)</label>
+        <InputSelect id="provider" @bind-Value="account.ProviderSelection">
+            <option value="">Not applicable</option>
+            <option value="GCash">GCash</option>
+            <option value="Maya">Maya</option>
+            <option value="Custom">Custom</option>
+        </InputSelect>
+    </div>
+
+    @if (account.ProviderSelection == "Custom")
+    {
+        <div>
+            <label for="custom-provider">Custom Provider</label>
+            <InputText id="custom-provider" @bind-Value="account.CustomProvider" />
+            <ValidationMessage For="@(() => account.CustomProvider)" />
+        </div>
+    }
+
+    <div>
+        <label for="starting-balance">Starting Balance</label>
+        <InputNumber id="starting-balance" @bind-Value="account.StartingBalance" step="0.01" />
+        <ValidationMessage For="@(() => account.StartingBalance)" />
+    </div>
+
+    <button type="submit">Add Account</button>
+</EditForm>
+
+<hr />
+
+<h4>Your Accounts</h4>
+
+@if (accounts.Count == 0)
+{
+    <p>No accounts yet.</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Account Type</th>
+                <th>Provider</th>
+                <th>Balance</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in accounts)
+            {
+                <tr>
+                    <td>@item.Name</td>
+                    <td>@item.AccountType</td>
+                    <td>@(string.IsNullOrWhiteSpace(item.Provider) ? "—" : item.Provider)</td>
+                    <td>@FormatPeso(item.StartingBalance)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private static readonly string[] AccountTypes =
+    [
+        "E-Wallet",
+        "Digital Bank",
+        "Savings",
+        "Checking",
+        "Cash",
+        "Credit Card",
+        "Other"
+    ];
+
+    private AccountInput account = new();
+    private List<FinancialAccount> accounts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAccounts();
+    }
+
+    private async Task LoadAccounts()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var userId = authState.User
+            .FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        if (userId is null)
+            return;
+
+        accounts = await Db.FinancialAccounts
+            .Where(a => a.UserId == userId && !a.IsArchived)
+            .ToListAsync();
+    }
+
+    private async Task SaveAccount()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var userId = authState.User
+            .FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        if (userId is null)
+            return;
+
+        var financialAccount = new FinancialAccount
+        {
+            UserId = userId,
+            Name = account.Name.Trim(),
+            AccountType = account.AccountType,
+            Provider = account.ProviderSelection switch
+            {
+                "GCash" or "Maya" => account.ProviderSelection,
+                "Custom" => account.CustomProvider?.Trim(),
+                _ => null
+            },
+            StartingBalance = account.StartingBalance!.Value
+        };
+
+        Db.FinancialAccounts.Add(financialAccount);
+        await Db.SaveChangesAsync();
+
+        account = new AccountInput();
+
+        await LoadAccounts();
+    }
+
+    private static string FormatPeso(decimal amount) =>
+        $"₱{amount.ToString("N2", CultureInfo.GetCultureInfo("en-PH"))}";
+
+    private sealed class AccountInput : IValidatableObject
+    {
+        [Required(ErrorMessage = "Account name is required.")]
+        public string Name { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Account type is required.")]
+        public string AccountType { get; set; } = string.Empty;
+
+        public string ProviderSelection { get; set; } = string.Empty;
+
+        public string? CustomProvider { get; set; }
+
+        [Required(ErrorMessage = "Starting balance is required.")]
+        [Range(typeof(decimal), "-999999999999.99", "999999999999.99",
+            ErrorMessage = "Enter a valid PHP amount.")]
+        public decimal? StartingBalance { get; set; }
+
+        public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+        {
+            if (!string.IsNullOrEmpty(Name) && string.IsNullOrWhiteSpace(Name))
+            {
+                yield return new ValidationResult(
+                    "Account name is required.",
+                    [nameof(Name)]);
+            }
+
+            if (!string.IsNullOrWhiteSpace(AccountType) && !AccountTypes.Contains(AccountType))
+            {
+                yield return new ValidationResult(
+                    "Select a valid account type.",
+                    [nameof(AccountType)]);
+            }
+
+            if (ProviderSelection is not ("" or "GCash" or "Maya" or "Custom"))
+            {
+                yield return new ValidationResult(
+                    "Select a valid provider.",
+                    [nameof(ProviderSelection)]);
+            }
+
+            if (ProviderSelection == "Custom" && string.IsNullOrWhiteSpace(CustomProvider))
+            {
+                yield return new ValidationResult(
+                    "Enter a custom provider.",
+                    [nameof(CustomProvider)]);
+            }
+
+            if (StartingBalance is decimal balance && decimal.Round(balance, 2) != balance)
+            {
+                yield return new ValidationResult(
+                    "Starting balance can have at most two decimal places.",
+                    [nameof(StartingBalance)]);
+            }
+        }
+    }
+}

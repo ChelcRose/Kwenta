@@ -84,10 +84,10 @@ else
             @foreach (var item in accounts)
             {
                 <tr>
-                    <td>@item.Name</td>
-                    <td>@item.AccountType</td>
-                    <td>@(string.IsNullOrWhiteSpace(item.Provider) ? "—" : item.Provider)</td>
-                    <td>@FormatPeso(item.StartingBalance)</td>
+                    <td>@item.Account.Name</td>
+                    <td>@item.Account.AccountType</td>
+                    <td>@(string.IsNullOrWhiteSpace(item.Account.Provider) ? "—" : item.Account.Provider)</td>
+                    <td>@FormatPeso(item.CurrentBalance)</td>
                 </tr>
             }
         </tbody>
@@ -107,7 +107,7 @@ else
     ];
 
     private AccountInput account = new();
-    private List<FinancialAccount> accounts = new();
+    private List<AccountBalance> accounts = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -123,9 +123,41 @@ else
         if (userId is null)
             return;
 
-        accounts = await Db.FinancialAccounts
+        var userAccounts = await Db.FinancialAccounts
             .Where(a => a.UserId == userId && !a.IsArchived)
             .ToListAsync();
+
+        var accountIds = userAccounts.Select(a => a.Id).ToList();
+
+        var transactions = await Db.Transactions
+            .Where(transaction =>
+                transaction.UserId == userId &&
+                accountIds.Contains(transaction.AccountId))
+            .Select(transaction => new
+            {
+                transaction.AccountId,
+                transaction.Type,
+                transaction.Amount
+            })
+            .ToListAsync();
+
+        accounts = userAccounts
+            .Select(userAccount => new AccountBalance
+            {
+                Account = userAccount,
+                CurrentBalance = userAccount.StartingBalance
+                    + transactions
+                        .Where(transaction =>
+                            transaction.AccountId == userAccount.Id &&
+                            transaction.Type == TransactionType.Income)
+                        .Sum(transaction => transaction.Amount)
+                    - transactions
+                        .Where(transaction =>
+                            transaction.AccountId == userAccount.Id &&
+                            transaction.Type == TransactionType.Expense)
+                        .Sum(transaction => transaction.Amount)
+            })
+            .ToList();
     }
 
     private async Task SaveAccount()
@@ -161,6 +193,13 @@ else
 
     private static string FormatPeso(decimal amount) =>
         $"₱{amount.ToString("N2", CultureInfo.GetCultureInfo("en-PH"))}";
+
+    private sealed class AccountBalance
+    {
+        public required FinancialAccount Account { get; init; }
+
+        public decimal CurrentBalance { get; init; }
+    }
 
     private sealed class AccountInput : IValidatableObject
     {

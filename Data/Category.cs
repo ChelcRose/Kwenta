@@ -9,4 +9,6 @@ public class Category
     public CategoryType Type { get; set; }
 
     public bool IsDefault { get; set; }
+
+    public ICollection<Transaction> Transactions { get; set; } = [];
 }

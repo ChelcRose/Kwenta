@@ -1,0 +1,76 @@
+@page "/transactions"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using System.Globalization
+@using Kwenta.Data
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Db
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<h3>Transaction History</h3>
+
+@if (transactions.Count == 0)
+{
+    <p>No transactions yet.</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr>
+                <th>Amount</th>
+                <th>Type</th>
+                <th>Category</th>
+                <th>Account</th>
+                <th>Date</th>
+                <th>Merchant/Source</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var transaction in transactions)
+            {
+                <tr>
+                    <td>@FormatPeso(transaction.Amount)</td>
+                    <td>@transaction.Type</td>
+                    <td>@transaction.Category.Name</td>
+                    <td>@transaction.FinancialAccount.Name</td>
+                    <td>@transaction.Date.ToString("MMM d, yyyy", CultureInfo.GetCultureInfo("en-PH"))</td>
+                    <td>@transaction.Merchant</td>
+                    <td>@(string.IsNullOrWhiteSpace(transaction.Description) ? "—" : transaction.Description)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Transaction> transactions = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var userId = authState.User
+            .FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        if (userId is null)
+            return;
+
+        transactions = await Db.Transactions
+            .AsNoTracking()
+            .Include(transaction => transaction.Category)
+            .Include(transaction => transaction.FinancialAccount)
+            .Where(transaction =>
+                transaction.UserId == userId &&
+                transaction.FinancialAccount.UserId == userId &&
+                (transaction.Type == TransactionType.Expense ||
+                 transaction.Type == TransactionType.Income))
+            .OrderByDescending(transaction => transaction.Date)
+            .ThenByDescending(transaction => transaction.Id)
+            .ToListAsync();
+    }
+
+    private static string FormatPeso(decimal amount) =>
+        $"₱{amount.ToString("N2", CultureInfo.GetCultureInfo("en-PH"))}";
+}

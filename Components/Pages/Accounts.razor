@@ -145,17 +145,18 @@ else
             .Select(userAccount => new AccountBalance
             {
                 Account = userAccount,
-                CurrentBalance = userAccount.StartingBalance
-                    + transactions
+                CurrentBalance = FinancialCalculations.AccountBalance(
+                    userAccount.StartingBalance,
+                    transactions
                         .Where(transaction =>
                             transaction.AccountId == userAccount.Id &&
                             transaction.Type == TransactionType.Income)
-                        .Sum(transaction => transaction.Amount)
-                    - transactions
+                        .Sum(transaction => transaction.Amount),
+                    transactions
                         .Where(transaction =>
                             transaction.AccountId == userAccount.Id &&
                             transaction.Type == TransactionType.Expense)
-                        .Sum(transaction => transaction.Amount)
+                        .Sum(transaction => transaction.Amount))
             })
             .ToList();
     }

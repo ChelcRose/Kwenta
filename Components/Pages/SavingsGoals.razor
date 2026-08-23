@@ -1,0 +1,234 @@
+@page "/savings-goals"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using System.ComponentModel.DataAnnotations
+@using System.Globalization
+@using Kwenta.Data
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Db
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<h3>Savings Goals</h3>
+
+<EditForm Model="goalInput" OnValidSubmit="SaveGoal" FormName="AddSavingsGoal">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    @if (!string.IsNullOrWhiteSpace(saveError))
+    {
+        <p role="alert">@saveError</p>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(successMessage))
+    {
+        <p role="status">@successMessage</p>
+    }
+
+    <div>
+        <label for="goal-name">Goal Name</label>
+        <InputText id="goal-name" @bind-Value="goalInput.Name" />
+        <ValidationMessage For="@(() => goalInput.Name)" />
+    </div>
+
+    <div>
+        <label for="goal-target">Target Amount</label>
+        <InputNumber id="goal-target" @bind-Value="goalInput.TargetAmount" step="0.01" />
+        <ValidationMessage For="@(() => goalInput.TargetAmount)" />
+    </div>
+
+    <div>
+        <label for="goal-saved">Current Saved Amount</label>
+        <InputNumber id="goal-saved" @bind-Value="goalInput.CurrentSavedAmount" step="0.01" />
+        <ValidationMessage For="@(() => goalInput.CurrentSavedAmount)" />
+    </div>
+
+    <div>
+        <label for="goal-date">Target Date (optional)</label>
+        <InputDate id="goal-date" @bind-Value="goalInput.TargetDate" />
+        <ValidationMessage For="@(() => goalInput.TargetDate)" />
+    </div>
+
+    <button type="submit">Add Savings Goal</button>
+</EditForm>
+
+<hr />
+
+<h4>Your Savings Goals</h4>
+
+@if (goalProgress.Count == 0)
+{
+    <p>No savings goals yet.</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Target</th>
+                <th>Saved</th>
+                <th>Remaining</th>
+                <th>Progress</th>
+                <th>Target Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var progress in goalProgress)
+            {
+                <tr>
+                    <td>@progress.Goal.Name</td>
+                    <td>@FormatPeso(progress.Goal.TargetAmount)</td>
+                    <td>@FormatPeso(progress.Goal.CurrentSavedAmount)</td>
+                    <td>@FormatPeso(progress.Remaining)</td>
+                    <td>@FormatPercentage(progress.PercentageProgress)</td>
+                    <td>@FormatTargetDate(progress.Goal.TargetDate)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private SavingsGoalInput goalInput = new();
+    private List<SavingsGoalProgress> goalProgress = [];
+    private string? saveError;
+    private string? successMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadGoals();
+    }
+
+    private async Task SaveGoal()
+    {
+        saveError = null;
+        successMessage = null;
+
+        var userId = await GetCurrentUserId();
+
+        if (userId is null)
+        {
+            saveError = "You must be logged in to add a savings goal.";
+            return;
+        }
+
+        var goal = new SavingsGoal
+        {
+            UserId = userId,
+            Name = goalInput.Name,
+            TargetAmount = goalInput.TargetAmount!.Value,
+            CurrentSavedAmount = goalInput.CurrentSavedAmount!.Value,
+            TargetDate = goalInput.TargetDate
+        };
+
+        Db.SavingsGoals.Add(goal);
+        await Db.SaveChangesAsync();
+
+        goalInput = new SavingsGoalInput();
+        successMessage = "Savings goal added.";
+
+        await LoadGoals(userId);
+    }
+
+    private async Task LoadGoals()
+    {
+        var userId = await GetCurrentUserId();
+
+        if (userId is null)
+            return;
+
+        await LoadGoals(userId);
+    }
+
+    private async Task LoadGoals(string userId)
+    {
+        var goals = await Db.SavingsGoals
+            .AsNoTracking()
+            .Where(goal => goal.UserId == userId)
+            .OrderByDescending(goal => goal.Id)
+            .ToListAsync();
+
+        goalProgress = goals
+            .Select(goal => new SavingsGoalProgress(goal))
+            .ToList();
+    }
+
+    private async Task<string?> GetCurrentUserId()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return authState.User
+            .FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    }
+
+    private static string FormatPeso(decimal amount)
+    {
+        var formattedAmount = decimal.Abs(amount)
+            .ToString("N2", CultureInfo.GetCultureInfo("en-PH"));
+
+        return amount < 0
+            ? $"-₱{formattedAmount}"
+            : $"₱{formattedAmount}";
+    }
+
+    private static string FormatPercentage(decimal percentage) =>
+        $"{percentage.ToString("0.#", CultureInfo.GetCultureInfo("en-PH"))}%";
+
+    private static string FormatTargetDate(DateOnly? targetDate) =>
+        targetDate?.ToString("MMMM d, yyyy", CultureInfo.GetCultureInfo("en-PH")) ?? "—";
+
+    private sealed record SavingsGoalProgress(SavingsGoal Goal)
+    {
+        public decimal Remaining =>
+            FinancialCalculations.SavingsGoalRemaining(
+                Goal.TargetAmount,
+                Goal.CurrentSavedAmount);
+
+        public decimal PercentageProgress =>
+            FinancialCalculations.SavingsGoalPercentage(
+                Goal.TargetAmount,
+                Goal.CurrentSavedAmount);
+    }
+
+    private sealed class SavingsGoalInput : IValidatableObject
+    {
+        [Required(ErrorMessage = "Goal name is required.")]
+        public string Name { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Target amount is required.")]
+        [Range(typeof(decimal), "0.01", "999999999999.99", ErrorMessage = "Target amount must be greater than zero.")]
+        public decimal? TargetAmount { get; set; }
+
+        [Required(ErrorMessage = "Current saved amount is required.")]
+        [Range(typeof(decimal), "0", "999999999999.99", ErrorMessage = "Current saved amount cannot be negative.")]
+        public decimal? CurrentSavedAmount { get; set; }
+
+        public DateOnly? TargetDate { get; set; }
+
+        public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+        {
+            if (!string.IsNullOrEmpty(Name) && string.IsNullOrWhiteSpace(Name))
+            {
+                yield return new ValidationResult(
+                    "Goal name is required.",
+                    [nameof(Name)]);
+            }
+
+            if (TargetAmount is not null &&
+                decimal.Round(TargetAmount.Value, 2) != TargetAmount.Value)
+            {
+                yield return new ValidationResult(
+                    "Target amount cannot have more than two decimal places.",
+                    [nameof(TargetAmount)]);
+            }
+
+            if (CurrentSavedAmount is not null &&
+                decimal.Round(CurrentSavedAmount.Value, 2) != CurrentSavedAmount.Value)
+            {
+                yield return new ValidationResult(
+                    "Current saved amount cannot have more than two decimal places.",
+                    [nameof(CurrentSavedAmount)]);
+            }
+        }
+    }
+}

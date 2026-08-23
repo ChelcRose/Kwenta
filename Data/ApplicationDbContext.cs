@@ -9,9 +9,23 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<Category> Categories { get; set; }
 
+    public DbSet<Transaction> Transactions { get; set; }
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+
+        builder.Entity<Transaction>()
+            .HasOne(transaction => transaction.FinancialAccount)
+            .WithMany(account => account.Transactions)
+            .HasForeignKey(transaction => transaction.AccountId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.Entity<Transaction>()
+            .HasOne(transaction => transaction.Category)
+            .WithMany(category => category.Transactions)
+            .HasForeignKey(transaction => transaction.CategoryId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.Entity<Category>().HasData(
             new Category { Id = 1, Name = "Food", Type = CategoryType.Expense, IsDefault = true },

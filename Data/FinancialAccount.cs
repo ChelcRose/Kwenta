@@ -15,4 +15,6 @@ public class FinancialAccount
     public decimal StartingBalance { get; set; }
 
     public bool IsArchived { get; set; }
+
+    public ICollection<Transaction> Transactions { get; set; } = [];
 }

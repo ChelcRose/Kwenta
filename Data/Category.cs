@@ -13,4 +13,6 @@ public class Category
     public string? UserId { get; set; }
 
     public ICollection<Transaction> Transactions { get; set; } = [];
+
+    public ICollection<Budget> Budgets { get; set; } = [];
 }

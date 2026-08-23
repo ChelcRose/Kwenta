@@ -11,6 +11,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<Transaction> Transactions { get; set; }
 
+    public DbSet<Budget> Budgets { get; set; }
+
+    public DbSet<SavingsGoal> SavingsGoals { get; set; }
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -30,6 +34,19 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         builder.Entity<Category>()
             .HasIndex(category => new { category.UserId, category.Name, category.Type })
             .IsUnique();
+
+        builder.Entity<Budget>()
+            .HasOne(budget => budget.Category)
+            .WithMany(category => category.Budgets)
+            .HasForeignKey(budget => budget.CategoryId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.Entity<Budget>()
+            .HasIndex(budget => new { budget.UserId, budget.CategoryId, budget.Month, budget.Year })
+            .IsUnique();
+
+        builder.Entity<SavingsGoal>()
+            .HasIndex(goal => goal.UserId);
 
         builder.Entity<Category>().HasData(
             new Category { Id = 1, Name = "Food", Type = CategoryType.Expense, IsDefault = true },

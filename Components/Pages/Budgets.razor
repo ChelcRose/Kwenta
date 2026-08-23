@@ -1,0 +1,353 @@
+@page "/budgets"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using System.ComponentModel.DataAnnotations
+@using System.Globalization
+@using Kwenta.Data
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Db
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<h3>Monthly Budgets</h3>
+
+<EditForm Model="budgetInput" OnValidSubmit="SaveBudget" FormName="AddBudget">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    @if (!string.IsNullOrWhiteSpace(saveError))
+    {
+        <p role="alert">@saveError</p>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(successMessage))
+    {
+        <p role="status">@successMessage</p>
+    }
+
+    <div>
+        <label for="budget-category">Expense Category</label>
+        <InputSelect id="budget-category" @bind-Value="budgetInput.CategoryId">
+            <option value="">Select a category</option>
+            @foreach (var category in expenseCategories)
+            {
+                <option value="@category.Id">@category.Name</option>
+            }
+        </InputSelect>
+        <ValidationMessage For="@(() => budgetInput.CategoryId)" />
+    </div>
+
+    <div>
+        <label for="budget-month">Month</label>
+        <InputSelect id="budget-month" @bind-Value="budgetInput.Month">
+            <option value="">Select a month</option>
+            @for (var month = 1; month <= 12; month++)
+            {
+                <option value="@month">@GetMonthName(month)</option>
+            }
+        </InputSelect>
+        <ValidationMessage For="@(() => budgetInput.Month)" />
+    </div>
+
+    <div>
+        <label for="budget-year">Year</label>
+        <InputNumber id="budget-year" @bind-Value="budgetInput.Year" />
+        <ValidationMessage For="@(() => budgetInput.Year)" />
+    </div>
+
+    <div>
+        <label for="budget-limit">Monthly Limit</label>
+        <InputNumber id="budget-limit" @bind-Value="budgetInput.LimitAmount" step="0.01" />
+        <ValidationMessage For="@(() => budgetInput.LimitAmount)" />
+    </div>
+
+    <button type="submit" disabled="@(expenseCategories.Count == 0)">Add Budget</button>
+</EditForm>
+
+<hr />
+
+<h4>Your Budgets</h4>
+
+@if (budgetProgress.Count == 0)
+{
+    <p>No budgets yet.</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr>
+                <th>Category</th>
+                <th>Month</th>
+                <th>Limit</th>
+                <th>Spent</th>
+                <th>Remaining</th>
+                <th>Used</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var progress in budgetProgress)
+            {
+                <tr>
+                    <td>@progress.Budget.Category.Name</td>
+                    <td>@GetMonthName(progress.Budget.Month) @progress.Budget.Year</td>
+                    <td>@FormatPeso(progress.Budget.LimitAmount)</td>
+                    <td>@FormatPeso(progress.AmountSpent)</td>
+                    <td>@FormatPeso(progress.Remaining)</td>
+                    <td>@FormatPercentage(progress.PercentageUsed)</td>
+                    <td>
+                        @if (progress.IsOverBudget)
+                        {
+                            <strong>Over budget</strong>
+                        }
+                        else
+                        {
+                            <span>Within budget</span>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private BudgetInput budgetInput = NewBudgetInput();
+    private List<Category> expenseCategories = [];
+    private List<BudgetProgress> budgetProgress = [];
+    private string? saveError;
+    private string? successMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPageData();
+    }
+
+    private async Task SaveBudget()
+    {
+        saveError = null;
+        successMessage = null;
+
+        var userId = await GetCurrentUserId();
+
+        if (userId is null)
+        {
+            saveError = "You must be logged in to add a budget.";
+            return;
+        }
+
+        var categoryId = budgetInput.CategoryId!.Value;
+        var categoryIsValid = await Db.Categories.AnyAsync(category =>
+            category.Id == categoryId &&
+            category.Type == CategoryType.Expense &&
+            ((category.IsDefault && category.UserId == null) ||
+             (!category.IsDefault && category.UserId == userId)));
+
+        if (!categoryIsValid)
+        {
+            saveError = "Select a valid expense category.";
+            return;
+        }
+
+        var duplicateExists = await Db.Budgets.AnyAsync(budget =>
+            budget.UserId == userId &&
+            budget.CategoryId == categoryId &&
+            budget.Month == budgetInput.Month &&
+            budget.Year == budgetInput.Year);
+
+        if (duplicateExists)
+        {
+            saveError = "A budget for this category and month already exists.";
+            return;
+        }
+
+        var budget = new Budget
+        {
+            UserId = userId,
+            CategoryId = categoryId,
+            Month = budgetInput.Month!.Value,
+            Year = budgetInput.Year!.Value,
+            LimitAmount = budgetInput.LimitAmount!.Value
+        };
+
+        Db.Budgets.Add(budget);
+
+        try
+        {
+            await Db.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            Db.Entry(budget).State = EntityState.Detached;
+            saveError = "A budget for this category and month already exists.";
+            return;
+        }
+
+        budgetInput = NewBudgetInput();
+        successMessage = "Budget added.";
+
+        await LoadBudgets(userId);
+    }
+
+    private async Task LoadPageData()
+    {
+        var userId = await GetCurrentUserId();
+
+        if (userId is null)
+            return;
+
+        expenseCategories = await Db.Categories
+            .AsNoTracking()
+            .Where(category =>
+                category.Type == CategoryType.Expense &&
+                ((category.IsDefault && category.UserId == null) ||
+                 (!category.IsDefault && category.UserId == userId)))
+            .OrderByDescending(category => category.IsDefault)
+            .ThenBy(category => category.Name)
+            .ToListAsync();
+
+        await LoadBudgets(userId);
+    }
+
+    private async Task LoadBudgets(string userId)
+    {
+        var budgets = await Db.Budgets
+            .AsNoTracking()
+            .Include(budget => budget.Category)
+            .Where(budget => budget.UserId == userId)
+            .OrderByDescending(budget => budget.Year)
+            .ThenByDescending(budget => budget.Month)
+            .ThenBy(budget => budget.Category.Name)
+            .ToListAsync();
+
+        if (budgets.Count == 0)
+        {
+            budgetProgress = [];
+            return;
+        }
+
+        var categoryIds = budgets
+            .Select(budget => budget.CategoryId)
+            .Distinct()
+            .ToList();
+
+        var earliestBudget = budgets.MinBy(budget => budget.Year * 100 + budget.Month)!;
+        var latestBudget = budgets.MaxBy(budget => budget.Year * 100 + budget.Month)!;
+        var earliestDate = new DateOnly(earliestBudget.Year, earliestBudget.Month, 1);
+        var latestDateExclusive = new DateOnly(latestBudget.Year, latestBudget.Month, 1).AddMonths(1);
+
+        var expenseTransactions = await Db.Transactions
+            .AsNoTracking()
+            .Where(transaction =>
+                transaction.UserId == userId &&
+                transaction.FinancialAccount.UserId == userId &&
+                transaction.Type == TransactionType.Expense &&
+                categoryIds.Contains(transaction.CategoryId) &&
+                transaction.Date >= earliestDate &&
+                transaction.Date < latestDateExclusive)
+            .Select(transaction => new
+            {
+                transaction.CategoryId,
+                transaction.Date,
+                transaction.Amount
+            })
+            .ToListAsync();
+
+        var spendingByPeriod = expenseTransactions
+            .GroupBy(transaction => new
+            {
+                transaction.CategoryId,
+                transaction.Date.Month,
+                transaction.Date.Year
+            })
+            .ToDictionary(
+                group => (group.Key.CategoryId, group.Key.Month, group.Key.Year),
+                group => group.Sum(transaction => transaction.Amount));
+
+        budgetProgress = budgets
+            .Select(budget =>
+            {
+                spendingByPeriod.TryGetValue(
+                    (budget.CategoryId, budget.Month, budget.Year),
+                    out var amountSpent);
+
+                return new BudgetProgress(budget, amountSpent);
+            })
+            .ToList();
+    }
+
+    private async Task<string?> GetCurrentUserId()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return authState.User
+            .FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    }
+
+    private static BudgetInput NewBudgetInput()
+    {
+        var today = DateTime.Today;
+        return new BudgetInput
+        {
+            Month = today.Month,
+            Year = today.Year
+        };
+    }
+
+    private static string GetMonthName(int month) =>
+        CultureInfo.GetCultureInfo("en-PH").DateTimeFormat.GetMonthName(month);
+
+    private static string FormatPeso(decimal amount)
+    {
+        var formattedAmount = decimal.Abs(amount)
+            .ToString("N2", CultureInfo.GetCultureInfo("en-PH"));
+
+        return amount < 0
+            ? $"-₱{formattedAmount}"
+            : $"₱{formattedAmount}";
+    }
+
+    private static string FormatPercentage(decimal percentage) =>
+        $"{percentage.ToString("0.##", CultureInfo.GetCultureInfo("en-PH"))}%";
+
+    private sealed record BudgetProgress(Budget Budget, decimal AmountSpent)
+    {
+        public decimal Remaining =>
+            FinancialCalculations.BudgetRemaining(Budget.LimitAmount, AmountSpent);
+
+        public decimal PercentageUsed =>
+            FinancialCalculations.BudgetPercentageUsed(Budget.LimitAmount, AmountSpent);
+
+        public bool IsOverBudget =>
+            FinancialCalculations.IsOverBudget(Budget.LimitAmount, AmountSpent);
+    }
+
+    private sealed class BudgetInput : IValidatableObject
+    {
+        [Required(ErrorMessage = "Category is required.")]
+        public int? CategoryId { get; set; }
+
+        [Required(ErrorMessage = "Month is required.")]
+        [Range(1, 12, ErrorMessage = "Month must be between 1 and 12.")]
+        public int? Month { get; set; }
+
+        [Required(ErrorMessage = "Year is required.")]
+        [Range(2000, 2100, ErrorMessage = "Year must be between 2000 and 2100.")]
+        public int? Year { get; set; }
+
+        [Required(ErrorMessage = "Monthly limit is required.")]
+        [Range(typeof(decimal), "0.01", "999999999999.99", ErrorMessage = "Monthly limit must be greater than zero.")]
+        public decimal? LimitAmount { get; set; }
+
+        public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+        {
+            if (LimitAmount is not null &&
+                decimal.Round(LimitAmount.Value, 2) != LimitAmount.Value)
+            {
+                yield return new ValidationResult(
+                    "Monthly limit cannot have more than two decimal places.",
+                    [nameof(LimitAmount)]);
+            }
+        }
+    }
+}

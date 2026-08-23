@@ -1,0 +1,118 @@
+@page "/transactions/delete/{Id:int}"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using System.Globalization
+@using Kwenta.Data
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Db
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+
+<h3>Delete Transaction</h3>
+
+@if (transactionToDelete is not null)
+{
+    <p>Are you sure you want to delete this transaction?</p>
+
+    <dl>
+        <dt>Amount</dt>
+        <dd>@FormatPeso(transactionToDelete.Amount)</dd>
+
+        <dt>Type</dt>
+        <dd>@transactionToDelete.Type</dd>
+
+        <dt>Category</dt>
+        <dd>@transactionToDelete.Category.Name</dd>
+
+        <dt>Account</dt>
+        <dd>@transactionToDelete.FinancialAccount.Name</dd>
+
+        <dt>Date</dt>
+        <dd>@transactionToDelete.Date.ToString("MMM d, yyyy", CultureInfo.GetCultureInfo("en-PH"))</dd>
+
+        <dt>Merchant/Source</dt>
+        <dd>@transactionToDelete.Merchant</dd>
+    </dl>
+
+    <button type="button" @onclick="ConfirmDelete" disabled="@isDeleting">Confirm Delete</button>
+    <a href="/transactions">Cancel</a>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private Transaction? transactionToDelete;
+    private bool isDeleting;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        transactionToDelete = null;
+
+        var userId = await GetCurrentUserId();
+
+        if (userId is null)
+        {
+            NavigationManager.NavigateTo("/not-found");
+            return;
+        }
+
+        transactionToDelete = await Db.Transactions
+            .AsNoTracking()
+            .Include(transaction => transaction.Category)
+            .Include(transaction => transaction.FinancialAccount)
+            .SingleOrDefaultAsync(transaction =>
+                transaction.Id == Id &&
+                transaction.UserId == userId &&
+                transaction.FinancialAccount.UserId == userId);
+
+        if (transactionToDelete is null)
+        {
+            NavigationManager.NavigateTo("/not-found");
+        }
+    }
+
+    private async Task ConfirmDelete()
+    {
+        if (isDeleting)
+            return;
+
+        isDeleting = true;
+
+        var userId = await GetCurrentUserId();
+
+        if (userId is null)
+        {
+            NavigationManager.NavigateTo("/not-found");
+            return;
+        }
+
+        var transaction = await Db.Transactions
+            .SingleOrDefaultAsync(transaction =>
+                transaction.Id == Id &&
+                transaction.UserId == userId &&
+                transaction.FinancialAccount.UserId == userId);
+
+        if (transaction is null)
+        {
+            NavigationManager.NavigateTo("/not-found");
+            return;
+        }
+
+        Db.Transactions.Remove(transaction);
+        await Db.SaveChangesAsync();
+
+        NavigationManager.NavigateTo("/transactions");
+    }
+
+    private async Task<string?> GetCurrentUserId()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return authState.User
+            .FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    }
+
+    private static string FormatPeso(decimal amount) =>
+        $"₱{amount.ToString("N2", CultureInfo.GetCultureInfo("en-PH"))}";
+}

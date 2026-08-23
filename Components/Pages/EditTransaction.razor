@@ -1,0 +1,259 @@
+@page "/transactions/edit/{Id:int}"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using System.ComponentModel.DataAnnotations
+@using Kwenta.Data
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Db
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+
+<h3>Edit Transaction</h3>
+
+@if (isLoaded)
+{
+    <p>Transaction Type: @transactionType</p>
+
+    <EditForm Model="editTransaction" OnValidSubmit="SaveTransaction" FormName="EditTransaction">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        @if (!string.IsNullOrWhiteSpace(saveError))
+        {
+            <p role="alert">@saveError</p>
+        }
+
+        <div>
+            <label for="transaction-amount">Amount</label>
+            <InputNumber id="transaction-amount" @bind-Value="editTransaction.Amount" step="0.01" />
+            <ValidationMessage For="@(() => editTransaction.Amount)" />
+        </div>
+
+        <div>
+            <label for="transaction-account">Financial Account</label>
+            <InputSelect id="transaction-account" @bind-Value="editTransaction.AccountId">
+                <option value="">Select an account</option>
+                @foreach (var account in accounts)
+                {
+                    <option value="@account.Id">@account.Name</option>
+                }
+            </InputSelect>
+            <ValidationMessage For="@(() => editTransaction.AccountId)" />
+        </div>
+
+        <div>
+            <label for="transaction-category">Category</label>
+            <InputSelect id="transaction-category" @bind-Value="editTransaction.CategoryId">
+                <option value="">Select a category</option>
+                @foreach (var category in categories)
+                {
+                    <option value="@category.Id">@category.Name</option>
+                }
+            </InputSelect>
+            <ValidationMessage For="@(() => editTransaction.CategoryId)" />
+        </div>
+
+        <div>
+            <label for="transaction-date">Date</label>
+            <InputDate id="transaction-date" @bind-Value="editTransaction.Date" />
+            <ValidationMessage For="@(() => editTransaction.Date)" />
+        </div>
+
+        <div>
+            <label for="transaction-merchant-source">@MerchantSourceLabel</label>
+            <InputText id="transaction-merchant-source" @bind-Value="editTransaction.MerchantSource" />
+            <ValidationMessage For="@(() => editTransaction.MerchantSource)" />
+        </div>
+
+        <div>
+            <label for="transaction-description">Description (optional)</label>
+            <InputTextArea id="transaction-description" @bind-Value="editTransaction.Description" />
+        </div>
+
+        <button type="submit">Save Changes</button>
+        <a href="/transactions">Cancel</a>
+    </EditForm>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private EditTransactionInput editTransaction = new();
+    private List<FinancialAccount> accounts = [];
+    private List<Category> categories = [];
+    private TransactionType? transactionType;
+    private string? saveError;
+    private bool isLoaded;
+
+    private string MerchantSourceLabel =>
+        transactionType == TransactionType.Expense ? "Merchant/Payee" : "Source";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        isLoaded = false;
+
+        var userId = await GetCurrentUserId();
+
+        if (userId is null)
+        {
+            NavigationManager.NavigateTo("/not-found");
+            return;
+        }
+
+        var transaction = await Db.Transactions
+            .AsNoTracking()
+            .SingleOrDefaultAsync(transaction =>
+                transaction.Id == Id &&
+                transaction.UserId == userId &&
+                transaction.FinancialAccount.UserId == userId);
+
+        if (transaction is null)
+        {
+            NavigationManager.NavigateTo("/not-found");
+            return;
+        }
+
+        transactionType = transaction.Type;
+        var categoryType = ToCategoryType(transaction.Type);
+
+        accounts = await Db.FinancialAccounts
+            .Where(account => account.UserId == userId && !account.IsArchived)
+            .OrderBy(account => account.Name)
+            .ToListAsync();
+
+        categories = await Db.Categories
+            .Where(category =>
+                category.IsDefault &&
+                category.Type == categoryType)
+            .OrderBy(category => category.Name)
+            .ToListAsync();
+
+        editTransaction = new EditTransactionInput
+        {
+            Amount = transaction.Amount,
+            AccountId = transaction.AccountId,
+            CategoryId = transaction.CategoryId,
+            Date = transaction.Date,
+            MerchantSource = transaction.Merchant,
+            Description = transaction.Description
+        };
+
+        isLoaded = true;
+    }
+
+    private async Task SaveTransaction()
+    {
+        saveError = null;
+
+        var userId = await GetCurrentUserId();
+
+        if (userId is null)
+        {
+            NavigationManager.NavigateTo("/not-found");
+            return;
+        }
+
+        var transaction = await Db.Transactions
+            .SingleOrDefaultAsync(transaction =>
+                transaction.Id == Id &&
+                transaction.UserId == userId &&
+                transaction.FinancialAccount.UserId == userId);
+
+        if (transaction is null)
+        {
+            NavigationManager.NavigateTo("/not-found");
+            return;
+        }
+
+        var accountExists = await Db.FinancialAccounts.AnyAsync(account =>
+            account.Id == editTransaction.AccountId &&
+            account.UserId == userId &&
+            !account.IsArchived);
+
+        if (!accountExists)
+        {
+            saveError = "Select one of your active financial accounts.";
+            return;
+        }
+
+        var categoryType = ToCategoryType(transaction.Type);
+        var categoryExists = await Db.Categories.AnyAsync(category =>
+            category.Id == editTransaction.CategoryId &&
+            category.IsDefault &&
+            category.Type == categoryType);
+
+        if (!categoryExists)
+        {
+            saveError = $"Select a valid {transaction.Type.ToString().ToLowerInvariant()} category.";
+            return;
+        }
+
+        transaction.AccountId = editTransaction.AccountId!.Value;
+        transaction.CategoryId = editTransaction.CategoryId!.Value;
+        transaction.Amount = editTransaction.Amount!.Value;
+        transaction.Date = editTransaction.Date!.Value;
+        transaction.Merchant = editTransaction.MerchantSource.Trim();
+        transaction.Description = string.IsNullOrWhiteSpace(editTransaction.Description)
+            ? null
+            : editTransaction.Description.Trim();
+
+        await Db.SaveChangesAsync();
+
+        NavigationManager.NavigateTo("/transactions");
+    }
+
+    private async Task<string?> GetCurrentUserId()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return authState.User
+            .FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    }
+
+    private static CategoryType ToCategoryType(TransactionType type) => type switch
+    {
+        TransactionType.Expense => CategoryType.Expense,
+        TransactionType.Income => CategoryType.Income,
+        _ => throw new InvalidOperationException("Unsupported transaction type.")
+    };
+
+    private sealed class EditTransactionInput : IValidatableObject
+    {
+        [Required(ErrorMessage = "Amount is required.")]
+        [Range(typeof(decimal), "0.01", "999999999999.99",
+            ErrorMessage = "Amount must be greater than zero.")]
+        public decimal? Amount { get; set; }
+
+        [Required(ErrorMessage = "Financial account is required.")]
+        public int? AccountId { get; set; }
+
+        [Required(ErrorMessage = "Category is required.")]
+        public int? CategoryId { get; set; }
+
+        [Required(ErrorMessage = "Date is required.")]
+        public DateOnly? Date { get; set; }
+
+        [Required(ErrorMessage = "Merchant/source is required.")]
+        public string MerchantSource { get; set; } = string.Empty;
+
+        public string? Description { get; set; }
+
+        public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+        {
+            if (!string.IsNullOrEmpty(MerchantSource) && string.IsNullOrWhiteSpace(MerchantSource))
+            {
+                yield return new ValidationResult(
+                    "Merchant/source is required.",
+                    [nameof(MerchantSource)]);
+            }
+
+            if (Amount is decimal amount && decimal.Round(amount, 2) != amount)
+            {
+                yield return new ValidationResult(
+                    "Amount can have at most two decimal places.",
+                    [nameof(Amount)]);
+            }
+        }
+    }
+}

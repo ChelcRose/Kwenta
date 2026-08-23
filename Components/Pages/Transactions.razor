@@ -26,6 +26,7 @@ else
                 <th>Date</th>
                 <th>Merchant/Source</th>
                 <th>Description</th>
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -39,6 +40,10 @@ else
                     <td>@transaction.Date.ToString("MMM d, yyyy", CultureInfo.GetCultureInfo("en-PH"))</td>
                     <td>@transaction.Merchant</td>
                     <td>@(string.IsNullOrWhiteSpace(transaction.Description) ? "—" : transaction.Description)</td>
+                    <td>
+                        <a href="/transactions/edit/@transaction.Id">Edit</a>
+                        <a href="/transactions/delete/@transaction.Id">Delete</a>
+                    </td>
                 </tr>
             }
         </tbody>

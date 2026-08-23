@@ -27,6 +27,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasForeignKey(transaction => transaction.CategoryId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        builder.Entity<Category>()
+            .HasIndex(category => new { category.UserId, category.Name, category.Type })
+            .IsUnique();
+
         builder.Entity<Category>().HasData(
             new Category { Id = 1, Name = "Food", Type = CategoryType.Expense, IsDefault = true },
             new Category { Id = 2, Name = "Transportation", Type = CategoryType.Expense, IsDefault = true },

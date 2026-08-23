@@ -138,7 +138,10 @@ else
             .ToListAsync();
 
         incomeCategories = await Db.Categories
-            .Where(category => category.IsDefault && category.Type == CategoryType.Income)
+            .Where(category =>
+                category.Type == CategoryType.Income &&
+                ((category.IsDefault && category.UserId == null) ||
+                 (!category.IsDefault && category.UserId == userId)))
             .OrderBy(category => category.Name)
             .ToListAsync();
 
@@ -171,12 +174,13 @@ else
 
         var categoryExists = await Db.Categories.AnyAsync(category =>
             category.Id == income.CategoryId &&
-            category.IsDefault &&
-            category.Type == CategoryType.Income);
+            category.Type == CategoryType.Income &&
+            ((category.IsDefault && category.UserId == null) ||
+             (!category.IsDefault && category.UserId == userId)));
 
         if (!categoryExists)
         {
-            saveError = "Select a valid default income category.";
+            saveError = "Select a valid income category.";
             return;
         }
 

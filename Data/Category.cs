@@ -10,5 +10,7 @@ public class Category
 
     public bool IsDefault { get; set; }
 
+    public string? UserId { get; set; }
+
     public ICollection<Transaction> Transactions { get; set; } = [];
 }

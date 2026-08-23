@@ -1,0 +1,188 @@
+@page "/categories"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using System.ComponentModel.DataAnnotations
+@using Kwenta.Data
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Db
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<h3>Custom Categories</h3>
+
+<EditForm Model="categoryInput" OnValidSubmit="SaveCategory" FormName="AddCategory">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    @if (!string.IsNullOrWhiteSpace(saveError))
+    {
+        <p role="alert">@saveError</p>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(successMessage))
+    {
+        <p role="status">@successMessage</p>
+    }
+
+    <div>
+        <label for="category-name">Name</label>
+        <InputText id="category-name" @bind-Value="categoryInput.Name" />
+        <ValidationMessage For="@(() => categoryInput.Name)" />
+    </div>
+
+    <div>
+        <label for="category-type">Type</label>
+        <InputSelect id="category-type" @bind-Value="categoryInput.Type">
+            <option value="">Select a category type</option>
+            <option value="@CategoryType.Expense">Expense</option>
+            <option value="@CategoryType.Income">Income</option>
+        </InputSelect>
+        <ValidationMessage For="@(() => categoryInput.Type)" />
+    </div>
+
+    <button type="submit">Add Category</button>
+</EditForm>
+
+<hr />
+
+<h4>Your Custom Categories</h4>
+
+@if (customCategories.Count == 0)
+{
+    <p>No custom categories yet.</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Type</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var category in customCategories)
+            {
+                <tr>
+                    <td>@category.Name</td>
+                    <td>@category.Type</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private CategoryInput categoryInput = new();
+    private List<Category> customCategories = [];
+    private string? saveError;
+    private string? successMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCategories();
+    }
+
+    private async Task SaveCategory()
+    {
+        saveError = null;
+        successMessage = null;
+
+        var userId = await GetCurrentUserId();
+
+        if (userId is null)
+        {
+            saveError = "You must be logged in to add a category.";
+            return;
+        }
+
+        var name = categoryInput.Name.Trim();
+        var type = categoryInput.Type!.Value;
+
+        var duplicateExists = await Db.Categories.AnyAsync(category =>
+            !category.IsDefault &&
+            category.UserId == userId &&
+            category.Name == name &&
+            category.Type == type);
+
+        if (duplicateExists)
+        {
+            saveError = "You already have a category with this name and type.";
+            return;
+        }
+
+        var category = new Category
+        {
+            Name = name,
+            Type = type,
+            IsDefault = false,
+            UserId = userId
+        };
+
+        Db.Categories.Add(category);
+
+        try
+        {
+            await Db.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            Db.Entry(category).State = EntityState.Detached;
+            saveError = "You already have a category with this name and type.";
+            return;
+        }
+
+        categoryInput = new CategoryInput();
+        successMessage = "Category added.";
+
+        await LoadCategories();
+    }
+
+    private async Task LoadCategories()
+    {
+        var userId = await GetCurrentUserId();
+
+        if (userId is null)
+            return;
+
+        customCategories = await Db.Categories
+            .AsNoTracking()
+            .Where(category => !category.IsDefault && category.UserId == userId)
+            .OrderBy(category => category.Type)
+            .ThenBy(category => category.Name)
+            .ToListAsync();
+    }
+
+    private async Task<string?> GetCurrentUserId()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return authState.User
+            .FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    }
+
+    private sealed class CategoryInput : IValidatableObject
+    {
+        [Required(ErrorMessage = "Category name is required.")]
+        public string Name { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Category type is required.")]
+        public CategoryType? Type { get; set; }
+
+        public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+        {
+            if (!string.IsNullOrEmpty(Name) && string.IsNullOrWhiteSpace(Name))
+            {
+                yield return new ValidationResult(
+                    "Category name is required.",
+                    [nameof(Name)]);
+            }
+
+            if (Type is not null && Type is not (CategoryType.Expense or CategoryType.Income))
+            {
+                yield return new ValidationResult(
+                    "Select a valid category type.",
+                    [nameof(Type)]);
+            }
+        }
+    }
+}

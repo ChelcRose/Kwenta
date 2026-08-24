@@ -4,7 +4,13 @@
 
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
-        <a class="navbar-brand" href="">Kwenta</a>
+        <a class="navbar-brand" href="dashboard">
+            <span class="brand-mark" aria-hidden="true">K</span>
+            <span>
+                <strong>Kwenta</strong>
+                <small>Personal finance</small>
+            </span>
+        </a>
     </div>
 </div>
 
@@ -12,64 +18,69 @@
 
 <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
     <nav class="nav flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="counter">
-                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Counter
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="weather">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="auth">
-                <span class="bi bi-lock-nav-menu" aria-hidden="true"></span> Auth Required
-            </NavLink>
-        </div>
-
         <AuthorizeView>
             <Authorized>
+                <p class="nav-section-label">Overview</p>
                 <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="dashboard">Dashboard</NavLink>
+                    <NavLink class="nav-link" href="dashboard">
+                        <span class="nav-icon" aria-hidden="true">⌂</span> Dashboard
+                    </NavLink>
+                </div>
+
+                <p class="nav-section-label">Money</p>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="accounts">
+                        <span class="nav-icon" aria-hidden="true">▣</span> Accounts
+                    </NavLink>
                 </div>
                 <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="accounts">Accounts</NavLink>
+                    <NavLink class="nav-link" href="transactions">
+                        <span class="nav-icon" aria-hidden="true">⇄</span> Transactions
+                    </NavLink>
                 </div>
                 <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="expenses/add">Add Expense</NavLink>
+                    <NavLink class="nav-link" href="expenses/add">
+                        <span class="nav-icon" aria-hidden="true">−</span> Add Expense
+                    </NavLink>
                 </div>
                 <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="income/add">Add Income</NavLink>
+                    <NavLink class="nav-link" href="income/add">
+                        <span class="nav-icon" aria-hidden="true">＋</span> Add Income
+                    </NavLink>
+                </div>
+
+                <p class="nav-section-label">Planning</p>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="budgets">
+                        <span class="nav-icon" aria-hidden="true">◫</span> Budgets
+                    </NavLink>
                 </div>
                 <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="transactions">Transactions</NavLink>
+                    <NavLink class="nav-link" href="savings-goals">
+                        <span class="nav-icon" aria-hidden="true">◇</span> Savings Goals
+                    </NavLink>
                 </div>
                 <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="categories">Categories</NavLink>
-                </div>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="budgets">Budgets</NavLink>
-                </div>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="savings-goals">Savings Goals</NavLink>
+                    <NavLink class="nav-link" href="categories">
+                        <span class="nav-icon" aria-hidden="true">#</span> Categories
+                    </NavLink>
                 </div>
             </Authorized>
+            <NotAuthorized>
+                <div class="nav-item px-3 public-home-link">
+                    <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                        <span class="nav-icon" aria-hidden="true">⌂</span> Home
+                    </NavLink>
+                </div>
+            </NotAuthorized>
         </AuthorizeView>
 
         <AuthorizeView>
             <Authorized>
                 <div class="nav-item px-3">
                     <NavLink class="nav-link" href="Account/Manage">
-                        <span class="bi bi-person-fill-nav-menu" aria-hidden="true"></span> @context.User.Identity?.Name
+                        <span class="nav-icon" aria-hidden="true">○</span>
+                        <span class="user-name">@context.User.Identity?.Name</span>
                     </NavLink>
                 </div>
                 <div class="nav-item px-3">
@@ -77,7 +88,7 @@
                         <AntiforgeryToken />
                         <input type="hidden" name="ReturnUrl" value="@currentUrl" />
                         <button type="submit" class="nav-link">
-                            <span class="bi bi-arrow-bar-left-nav-menu" aria-hidden="true"></span> Logout
+                            <span class="nav-icon" aria-hidden="true">↪</span> Logout
                         </button>
                     </form>
                 </div>
@@ -85,12 +96,12 @@
             <NotAuthorized>
                 <div class="nav-item px-3">
                     <NavLink class="nav-link" href="Account/Register">
-                        <span class="bi bi-person-nav-menu" aria-hidden="true"></span> Register
+                        <span class="nav-icon" aria-hidden="true">＋</span> Register
                     </NavLink>
                 </div>
                 <div class="nav-item px-3">
                     <NavLink class="nav-link" href="Account/Login">
-                        <span class="bi bi-person-badge-nav-menu" aria-hidden="true"></span> Login
+                        <span class="nav-icon" aria-hidden="true">→</span> Login
                     </NavLink>
                 </div>
             </NotAuthorized>

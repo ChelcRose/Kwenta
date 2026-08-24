@@ -9,34 +9,42 @@
 @inject ApplicationDbContext Db
 @inject AuthenticationStateProvider AuthenticationStateProvider
 
-<h3>Add Expense</h3>
+<div class="app-page">
+<header class="page-header">
+    <div>
+        <h1>Add Expense</h1>
+        <p class="page-subtitle">Record spending against one of your financial accounts.</p>
+    </div>
+</header>
 
 @if (accounts.Count == 0)
 {
-    <p>Create an active financial account before adding an expense.</p>
+    <div class="status-message status-error">Create an active financial account before adding an expense.</div>
 }
 
-<EditForm Model="expense" OnValidSubmit="SaveExpense" FormName="AddExpense">
+<EditForm Model="expense" OnValidSubmit="SaveExpense" FormName="AddExpense" class="surface-card form-card">
+    <h2 class="section-heading">Expense details</h2>
     <DataAnnotationsValidator />
     <ValidationSummary />
 
     @if (!string.IsNullOrWhiteSpace(saveError))
     {
-        <p role="alert">@saveError</p>
+        <p class="status-message status-error" role="alert">@saveError</p>
     }
 
     @if (!string.IsNullOrWhiteSpace(successMessage))
     {
-        <p role="status">@successMessage</p>
+        <p class="status-message status-success" role="status">@successMessage</p>
     }
 
-    <div>
+    <div class="form-grid">
+    <div class="form-field">
         <label for="expense-amount">Amount</label>
         <InputNumber id="expense-amount" @bind-Value="expense.Amount" step="0.01" />
         <ValidationMessage For="@(() => expense.Amount)" />
     </div>
 
-    <div>
+    <div class="form-field">
         <label for="expense-account">Financial Account</label>
         <InputSelect id="expense-account" @bind-Value="expense.AccountId">
             <option value="">Select an account</option>
@@ -48,7 +56,7 @@
         <ValidationMessage For="@(() => expense.AccountId)" />
     </div>
 
-    <div>
+    <div class="form-field">
         <label for="expense-category">Expense Category</label>
         <InputSelect id="expense-category" @bind-Value="expense.CategoryId">
             <option value="">Select a category</option>
@@ -60,37 +68,40 @@
         <ValidationMessage For="@(() => expense.CategoryId)" />
     </div>
 
-    <div>
+    <div class="form-field">
         <label for="expense-date">Date</label>
         <InputDate id="expense-date" @bind-Value="expense.Date" />
         <ValidationMessage For="@(() => expense.Date)" />
     </div>
 
-    <div>
+    <div class="form-field form-field-full">
         <label for="expense-merchant">Merchant/Payee</label>
         <InputText id="expense-merchant" @bind-Value="expense.Merchant" />
         <ValidationMessage For="@(() => expense.Merchant)" />
     </div>
 
-    <div>
+    <div class="form-field form-field-full">
         <label for="expense-description">Description (optional)</label>
         <InputTextArea id="expense-description" @bind-Value="expense.Description" />
     </div>
 
-    <button type="submit" disabled="@(accounts.Count == 0)">Add Expense</button>
+    </div>
+    <div class="form-actions">
+        <button type="submit" class="app-button app-button-primary" disabled="@(accounts.Count == 0)">Add Expense</button>
+    </div>
 </EditForm>
 
-<hr />
-
-<h4>Recent Expenses</h4>
+<section class="content-section">
+<div class="section-bar"><h2>Recent expenses</h2></div>
 
 @if (recentExpenses.Count == 0)
 {
-    <p>No expenses yet.</p>
+    <div class="empty-state">No expenses yet.</div>
 }
 else
 {
-    <table>
+    <div class="surface-card data-table-wrap">
+    <table class="data-table">
         <thead>
             <tr>
                 <th>Amount</th>
@@ -105,17 +116,20 @@ else
             @foreach (var transaction in recentExpenses)
             {
                 <tr>
-                    <td>@FormatPeso(transaction.Amount)</td>
-                    <td>@transaction.Category.Name</td>
-                    <td>@transaction.FinancialAccount.Name</td>
-                    <td>@transaction.Date.ToString("MMM d, yyyy", CultureInfo.GetCultureInfo("en-PH"))</td>
-                    <td>@transaction.Merchant</td>
-                    <td>@(string.IsNullOrWhiteSpace(transaction.Description) ? "—" : transaction.Description)</td>
+                    <td data-label="Amount" class="money-value money-negative">@FormatPeso(transaction.Amount)</td>
+                    <td data-label="Category">@transaction.Category.Name</td>
+                    <td data-label="Account">@transaction.FinancialAccount.Name</td>
+                    <td data-label="Date">@transaction.Date.ToString("MMM d, yyyy", CultureInfo.GetCultureInfo("en-PH"))</td>
+                    <td data-label="Merchant/Payee">@transaction.Merchant</td>
+                    <td data-label="Description" class="muted-text">@(string.IsNullOrWhiteSpace(transaction.Description) ? "—" : transaction.Description)</td>
                 </tr>
             }
         </tbody>
     </table>
+    </div>
 }
+</section>
+</div>
 
 @code {
     private ExpenseInput expense = NewExpense();

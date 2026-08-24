@@ -9,13 +9,21 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager NavigationManager
 
-<h3>Delete Transaction</h3>
+<div class="app-page">
+<header class="page-header">
+    <div>
+        <h1>Delete Transaction</h1>
+        <p class="page-subtitle">Review the details carefully. This action cannot be undone.</p>
+    </div>
+</header>
 
 @if (transactionToDelete is not null)
 {
-    <p>Are you sure you want to delete this transaction?</p>
+    <section class="surface-card danger-card">
+    <h3>Confirm deletion</h3>
+    <p class="muted-text">Are you sure you want to permanently delete this transaction?</p>
 
-    <dl>
+    <dl class="detail-list">
         <dt>Amount</dt>
         <dd>@FormatPeso(transactionToDelete.Amount)</dd>
 
@@ -35,9 +43,13 @@
         <dd>@transactionToDelete.Merchant</dd>
     </dl>
 
-    <button type="button" @onclick="ConfirmDelete" disabled="@isDeleting">Confirm Delete</button>
-    <a href="/transactions">Cancel</a>
+    <div class="form-actions">
+        <button type="button" class="app-button app-button-danger" @onclick="ConfirmDelete" disabled="@isDeleting">Confirm Delete</button>
+        <a class="app-button app-button-secondary" href="/transactions">Cancel</a>
+    </div>
+    </section>
 }
+</div>
 
 @code {
     [Parameter]

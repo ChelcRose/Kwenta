@@ -8,29 +8,37 @@
 @inject ApplicationDbContext Db
 @inject AuthenticationStateProvider AuthenticationStateProvider
 
-<h3>Custom Categories</h3>
+<div class="app-page">
+<header class="page-header">
+    <div>
+        <h1>Categories</h1>
+        <p class="page-subtitle">Create personal categories that match how you earn and spend.</p>
+    </div>
+</header>
 
-<EditForm Model="categoryInput" OnValidSubmit="SaveCategory" FormName="AddCategory">
+<EditForm Model="categoryInput" OnValidSubmit="SaveCategory" FormName="AddCategory" class="surface-card form-card">
+    <h2 class="section-heading">Create a category</h2>
     <DataAnnotationsValidator />
     <ValidationSummary />
 
     @if (!string.IsNullOrWhiteSpace(saveError))
     {
-        <p role="alert">@saveError</p>
+        <p class="status-message status-error" role="alert">@saveError</p>
     }
 
     @if (!string.IsNullOrWhiteSpace(successMessage))
     {
-        <p role="status">@successMessage</p>
+        <p class="status-message status-success" role="status">@successMessage</p>
     }
 
-    <div>
+    <div class="form-grid">
+    <div class="form-field">
         <label for="category-name">Name</label>
         <InputText id="category-name" @bind-Value="categoryInput.Name" />
         <ValidationMessage For="@(() => categoryInput.Name)" />
     </div>
 
-    <div>
+    <div class="form-field">
         <label for="category-type">Type</label>
         <InputSelect id="category-type" @bind-Value="categoryInput.Type">
             <option value="">Select a category type</option>
@@ -40,20 +48,23 @@
         <ValidationMessage For="@(() => categoryInput.Type)" />
     </div>
 
-    <button type="submit">Add Category</button>
+    </div>
+    <div class="form-actions">
+        <button type="submit" class="app-button app-button-primary">Add Category</button>
+    </div>
 </EditForm>
 
-<hr />
-
-<h4>Your Custom Categories</h4>
+<section class="content-section">
+<div class="section-bar"><h2>Your custom categories</h2></div>
 
 @if (customCategories.Count == 0)
 {
-    <p>No custom categories yet.</p>
+    <div class="empty-state">No custom categories yet. Your defaults are ready to use.</div>
 }
 else
 {
-    <table>
+    <div class="surface-card data-table-wrap">
+    <table class="data-table">
         <thead>
             <tr>
                 <th>Name</th>
@@ -64,13 +75,16 @@ else
             @foreach (var category in customCategories)
             {
                 <tr>
-                    <td>@category.Name</td>
-                    <td>@category.Type</td>
+                    <td data-label="Name">@category.Name</td>
+                    <td data-label="Type"><span class="badge-soft @(category.Type == CategoryType.Income ? "badge-income" : "badge-expense")">@category.Type</span></td>
                 </tr>
             }
         </tbody>
     </table>
+    </div>
 }
+</section>
+</div>
 
 @code {
     private CategoryInput categoryInput = new();

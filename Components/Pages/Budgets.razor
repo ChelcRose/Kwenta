@@ -9,23 +9,31 @@
 @inject ApplicationDbContext Db
 @inject AuthenticationStateProvider AuthenticationStateProvider
 
-<h3>Monthly Budgets</h3>
+<div class="app-page">
+<header class="page-header">
+    <div>
+        <h1>Monthly Budgets</h1>
+        <p class="page-subtitle">Set category limits and see exactly how much room you have left.</p>
+    </div>
+</header>
 
-<EditForm Model="budgetInput" OnValidSubmit="SaveBudget" FormName="AddBudget">
+<EditForm Model="budgetInput" OnValidSubmit="SaveBudget" FormName="AddBudget" class="surface-card form-card">
+    <h2 class="section-heading">Create a monthly budget</h2>
     <DataAnnotationsValidator />
     <ValidationSummary />
 
     @if (!string.IsNullOrWhiteSpace(saveError))
     {
-        <p role="alert">@saveError</p>
+        <p class="status-message status-error" role="alert">@saveError</p>
     }
 
     @if (!string.IsNullOrWhiteSpace(successMessage))
     {
-        <p role="status">@successMessage</p>
+        <p class="status-message status-success" role="status">@successMessage</p>
     }
 
-    <div>
+    <div class="form-grid">
+    <div class="form-field form-field-full">
         <label for="budget-category">Expense Category</label>
         <InputSelect id="budget-category" @bind-Value="budgetInput.CategoryId">
             <option value="">Select a category</option>
@@ -37,7 +45,7 @@
         <ValidationMessage For="@(() => budgetInput.CategoryId)" />
     </div>
 
-    <div>
+    <div class="form-field">
         <label for="budget-month">Month</label>
         <InputSelect id="budget-month" @bind-Value="budgetInput.Month">
             <option value="">Select a month</option>
@@ -49,32 +57,35 @@
         <ValidationMessage For="@(() => budgetInput.Month)" />
     </div>
 
-    <div>
+    <div class="form-field">
         <label for="budget-year">Year</label>
         <InputNumber id="budget-year" @bind-Value="budgetInput.Year" />
         <ValidationMessage For="@(() => budgetInput.Year)" />
     </div>
 
-    <div>
+    <div class="form-field form-field-full">
         <label for="budget-limit">Monthly Limit</label>
         <InputNumber id="budget-limit" @bind-Value="budgetInput.LimitAmount" step="0.01" />
         <ValidationMessage For="@(() => budgetInput.LimitAmount)" />
     </div>
 
-    <button type="submit" disabled="@(expenseCategories.Count == 0)">Add Budget</button>
+    </div>
+    <div class="form-actions">
+        <button type="submit" class="app-button app-button-primary" disabled="@(expenseCategories.Count == 0)">Add Budget</button>
+    </div>
 </EditForm>
 
-<hr />
-
-<h4>Your Budgets</h4>
+<section class="content-section">
+<div class="section-bar"><h2>Your budgets</h2></div>
 
 @if (budgetProgress.Count == 0)
 {
-    <p>No budgets yet.</p>
+    <div class="empty-state">No budgets yet. Create a monthly limit above.</div>
 }
 else
 {
-    <table>
+    <div class="surface-card data-table-wrap">
+    <table class="data-table">
         <thead>
             <tr>
                 <th>Category</th>
@@ -90,27 +101,35 @@ else
             @foreach (var progress in budgetProgress)
             {
                 <tr>
-                    <td>@progress.Budget.Category.Name</td>
-                    <td>@GetMonthName(progress.Budget.Month) @progress.Budget.Year</td>
-                    <td>@FormatPeso(progress.Budget.LimitAmount)</td>
-                    <td>@FormatPeso(progress.AmountSpent)</td>
-                    <td>@FormatPeso(progress.Remaining)</td>
-                    <td>@FormatPercentage(progress.PercentageUsed)</td>
-                    <td>
+                    <td data-label="Category"><strong>@progress.Budget.Category.Name</strong></td>
+                    <td data-label="Month">@GetMonthName(progress.Budget.Month) @progress.Budget.Year</td>
+                    <td data-label="Limit" class="money-value">@FormatPeso(progress.Budget.LimitAmount)</td>
+                    <td data-label="Spent" class="money-value">@FormatPeso(progress.AmountSpent)</td>
+                    <td data-label="Remaining" class="money-value @(progress.Remaining < 0 ? "money-negative" : "")">@FormatPeso(progress.Remaining)</td>
+                    <td data-label="Used">
+                        <div class="progress-copy"><span>@FormatPercentage(progress.PercentageUsed)</span></div>
+                        <div class="progress-track" aria-hidden="true">
+                            <div class="progress-fill @(progress.IsOverBudget ? "progress-fill-over" : "")" style="width: @Math.Clamp(progress.PercentageUsed, 0, 100)%"></div>
+                        </div>
+                    </td>
+                    <td data-label="Status">
                         @if (progress.IsOverBudget)
                         {
-                            <strong>Over budget</strong>
+                            <span class="badge-soft badge-danger">Over budget</span>
                         }
                         else
                         {
-                            <span>Within budget</span>
+                            <span class="badge-soft badge-success">Within budget</span>
                         }
                     </td>
                 </tr>
             }
         </tbody>
     </table>
+    </div>
 }
+</section>
+</div>
 
 @code {
     private BudgetInput budgetInput = NewBudgetInput();

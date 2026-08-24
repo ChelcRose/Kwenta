@@ -9,85 +9,95 @@
 @inject ApplicationDbContext Db
 @inject AuthenticationStateProvider AuthenticationStateProvider
 
-<h3>Savings Goals</h3>
+<div class="app-page">
+<header class="page-header">
+    <div>
+        <h1>Savings Goals</h1>
+        <p class="page-subtitle">Turn the things you want into clear, trackable targets.</p>
+    </div>
+</header>
 
-<EditForm Model="goalInput" OnValidSubmit="SaveGoal" FormName="AddSavingsGoal">
+<EditForm Model="goalInput" OnValidSubmit="SaveGoal" FormName="AddSavingsGoal" class="surface-card form-card">
+    <h2 class="section-heading">Create a savings goal</h2>
     <DataAnnotationsValidator />
     <ValidationSummary />
 
     @if (!string.IsNullOrWhiteSpace(saveError))
     {
-        <p role="alert">@saveError</p>
+        <p class="status-message status-error" role="alert">@saveError</p>
     }
 
     @if (!string.IsNullOrWhiteSpace(successMessage))
     {
-        <p role="status">@successMessage</p>
+        <p class="status-message status-success" role="status">@successMessage</p>
     }
 
-    <div>
+    <div class="form-grid">
+    <div class="form-field form-field-full">
         <label for="goal-name">Goal Name</label>
         <InputText id="goal-name" @bind-Value="goalInput.Name" />
         <ValidationMessage For="@(() => goalInput.Name)" />
     </div>
 
-    <div>
+    <div class="form-field">
         <label for="goal-target">Target Amount</label>
         <InputNumber id="goal-target" @bind-Value="goalInput.TargetAmount" step="0.01" />
         <ValidationMessage For="@(() => goalInput.TargetAmount)" />
     </div>
 
-    <div>
+    <div class="form-field">
         <label for="goal-saved">Current Saved Amount</label>
         <InputNumber id="goal-saved" @bind-Value="goalInput.CurrentSavedAmount" step="0.01" />
         <ValidationMessage For="@(() => goalInput.CurrentSavedAmount)" />
     </div>
 
-    <div>
+    <div class="form-field form-field-full">
         <label for="goal-date">Target Date (optional)</label>
         <InputDate id="goal-date" @bind-Value="goalInput.TargetDate" />
         <ValidationMessage For="@(() => goalInput.TargetDate)" />
     </div>
 
-    <button type="submit">Add Savings Goal</button>
+    </div>
+    <div class="form-actions">
+        <button type="submit" class="app-button app-button-primary">Add Savings Goal</button>
+    </div>
 </EditForm>
 
-<hr />
-
-<h4>Your Savings Goals</h4>
+<section class="content-section">
+<div class="section-bar"><h2>Your savings goals</h2></div>
 
 @if (goalProgress.Count == 0)
 {
-    <p>No savings goals yet.</p>
+    <div class="empty-state">No savings goals yet. Create something worth saving for.</div>
 }
 else
 {
-    <table>
-        <thead>
-            <tr>
-                <th>Name</th>
-                <th>Target</th>
-                <th>Saved</th>
-                <th>Remaining</th>
-                <th>Progress</th>
-                <th>Target Date</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var progress in goalProgress)
-            {
-                <tr>
-                    <td>@progress.Goal.Name</td>
-                    <td>@FormatPeso(progress.Goal.TargetAmount)</td>
-                    <td>@FormatPeso(progress.Goal.CurrentSavedAmount)</td>
-                    <td>@FormatPeso(progress.Remaining)</td>
-                    <td>@FormatPercentage(progress.PercentageProgress)</td>
-                    <td>@FormatTargetDate(progress.Goal.TargetDate)</td>
-                </tr>
-            }
-        </tbody>
-    </table>
+    <div class="card-grid">
+        @foreach (var progress in goalProgress)
+        {
+            <article class="surface-card detail-card">
+                <div class="detail-card-header">
+                    <div>
+                        <h3>@progress.Goal.Name</h3>
+                        <p class="detail-meta">Target date: @FormatTargetDate(progress.Goal.TargetDate)</p>
+                    </div>
+                    <span class="badge-soft @(progress.PercentageProgress >= 100 ? "badge-success" : "badge-neutral")">@FormatPercentage(progress.PercentageProgress)</span>
+                </div>
+                <p class="detail-amount money-value">@FormatPeso(progress.Goal.CurrentSavedAmount)</p>
+                <p class="detail-meta">saved of @FormatPeso(progress.Goal.TargetAmount)</p>
+                <div class="progress-copy">
+                    <span class="muted-text">Remaining</span>
+                    <strong class="@(progress.Remaining < 0 ? "money-negative" : "")">@FormatPeso(progress.Remaining)</strong>
+                </div>
+                <div class="progress-track" aria-hidden="true">
+                    <div class="progress-fill" style="width: @Math.Clamp(progress.PercentageProgress, 0, 100)%"></div>
+                </div>
+            </article>
+        }
+    </div>
 }
+</section>
+</div>
 
 @code {
     private SavingsGoalInput goalInput = new();

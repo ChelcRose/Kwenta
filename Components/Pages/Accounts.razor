@@ -9,19 +9,27 @@
 @inject ApplicationDbContext Db
 @inject AuthenticationStateProvider AuthenticationStateProvider
 
-<h3>Accounts</h3>
+<div class="app-page">
+<header class="page-header">
+    <div>
+        <h1>Accounts</h1>
+        <p class="page-subtitle">Keep track of where your money lives and see every balance at a glance.</p>
+    </div>
+</header>
 
-<EditForm Model="account" OnValidSubmit="SaveAccount" FormName="AddAccount">
+<EditForm Model="account" OnValidSubmit="SaveAccount" FormName="AddAccount" class="surface-card form-card">
+    <h2 class="section-heading">Add an account</h2>
     <DataAnnotationsValidator />
     <ValidationSummary />
 
-    <div>
+    <div class="form-grid">
+    <div class="form-field form-field-full">
         <label for="account-name">Name</label>
         <InputText id="account-name" @bind-Value="account.Name" />
         <ValidationMessage For="@(() => account.Name)" />
     </div>
 
-    <div>
+    <div class="form-field">
         <label for="account-type">Account Type</label>
         <InputSelect id="account-type" @bind-Value="account.AccountType">
             <option value="">Select an account type</option>
@@ -33,7 +41,7 @@
         <ValidationMessage For="@(() => account.AccountType)" />
     </div>
 
-    <div>
+    <div class="form-field">
         <label for="provider">Provider (optional)</label>
         <InputSelect id="provider" @bind-Value="account.ProviderSelection">
             <option value="">Not applicable</option>
@@ -45,54 +53,56 @@
 
     @if (account.ProviderSelection == "Custom")
     {
-        <div>
+        <div class="form-field form-field-full">
             <label for="custom-provider">Custom Provider</label>
             <InputText id="custom-provider" @bind-Value="account.CustomProvider" />
             <ValidationMessage For="@(() => account.CustomProvider)" />
         </div>
     }
 
-    <div>
+    <div class="form-field form-field-full">
         <label for="starting-balance">Starting Balance</label>
         <InputNumber id="starting-balance" @bind-Value="account.StartingBalance" step="0.01" />
         <ValidationMessage For="@(() => account.StartingBalance)" />
     </div>
 
-    <button type="submit">Add Account</button>
+    </div>
+
+    <div class="form-actions">
+        <button type="submit" class="app-button app-button-primary">Add Account</button>
+    </div>
 </EditForm>
 
-<hr />
-
-<h4>Your Accounts</h4>
+<section class="content-section">
+<div class="section-bar">
+    <h2>Your accounts</h2>
+</div>
 
 @if (accounts.Count == 0)
 {
-    <p>No accounts yet.</p>
+    <div class="empty-state">No accounts yet. Add your first account above.</div>
 }
 else
 {
-    <table>
-        <thead>
-            <tr>
-                <th>Name</th>
-                <th>Account Type</th>
-                <th>Provider</th>
-                <th>Balance</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var item in accounts)
-            {
-                <tr>
-                    <td>@item.Account.Name</td>
-                    <td>@item.Account.AccountType</td>
-                    <td>@(string.IsNullOrWhiteSpace(item.Account.Provider) ? "—" : item.Account.Provider)</td>
-                    <td>@FormatPeso(item.CurrentBalance)</td>
-                </tr>
-            }
-        </tbody>
-    </table>
+    <div class="card-grid">
+        @foreach (var item in accounts)
+        {
+            <article class="surface-card detail-card">
+                <div class="detail-card-header">
+                    <div>
+                        <h3>@item.Account.Name</h3>
+                        <p class="detail-meta">@(string.IsNullOrWhiteSpace(item.Account.Provider) ? item.Account.AccountType : $"{item.Account.Provider} · {item.Account.AccountType}")</p>
+                    </div>
+                    <span class="badge-soft badge-neutral">@item.Account.AccountType</span>
+                </div>
+                <p class="detail-amount money-value">@FormatPeso(item.CurrentBalance)</p>
+                <span class="muted-text">Current balance</span>
+            </article>
+        }
+    </div>
 }
+</section>
+</div>
 
 @code {
     private static readonly string[] AccountTypes =

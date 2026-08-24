@@ -1,7 +1,38 @@
 ﻿@page "/"
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Kwenta</PageTitle>
 
-<h1>Hello, world!</h1>
+<div class="app-page">
+    <section class="surface-card form-card">
+        <span class="badge-soft badge-success">Personal finance, simplified</span>
 
-Welcome to your new app.
+        <h1>Know where your money goes.</h1>
+
+        <p class="page-subtitle">
+            Track your accounts, income, expenses, budgets, and savings goals
+            in one secure place.
+        </p>
+
+        <AuthorizeView>
+            <Authorized>
+                <div class="form-actions">
+                    <a class="app-button app-button-primary" href="/dashboard">
+                        Open Dashboard
+                    </a>
+                </div>
+            </Authorized>
+
+            <NotAuthorized>
+                <div class="form-actions">
+                    <a class="app-button app-button-primary" href="/Account/Register">
+                        Create Account
+                    </a>
+
+                    <a class="app-button app-button-secondary" href="/Account/Login">
+                        Log In
+                    </a>
+                </div>
+            </NotAuthorized>
+        </AuthorizeView>
+    </section>
+</div>

@@ -9,28 +9,37 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager NavigationManager
 
-<h3>Edit Transaction</h3>
+<div class="app-page">
+<header class="page-header">
+    <div>
+        <h1>Edit Transaction</h1>
+        <p class="page-subtitle">Correct the details while keeping the transaction type unchanged.</p>
+    </div>
+</header>
 
 @if (isLoaded)
 {
-    <p>Transaction Type: @transactionType</p>
-
-    <EditForm Model="editTransaction" OnValidSubmit="SaveTransaction" FormName="EditTransaction">
+    <EditForm Model="editTransaction" OnValidSubmit="SaveTransaction" FormName="EditTransaction" class="surface-card form-card">
+        <div class="section-bar">
+            <h2 class="section-heading">Transaction details</h2>
+            <span class="badge-soft @(transactionType == TransactionType.Income ? "badge-income" : "badge-expense")">@transactionType</span>
+        </div>
         <DataAnnotationsValidator />
         <ValidationSummary />
 
         @if (!string.IsNullOrWhiteSpace(saveError))
         {
-            <p role="alert">@saveError</p>
+            <p class="status-message status-error" role="alert">@saveError</p>
         }
 
-        <div>
+        <div class="form-grid">
+        <div class="form-field">
             <label for="transaction-amount">Amount</label>
             <InputNumber id="transaction-amount" @bind-Value="editTransaction.Amount" step="0.01" />
             <ValidationMessage For="@(() => editTransaction.Amount)" />
         </div>
 
-        <div>
+        <div class="form-field">
             <label for="transaction-account">Financial Account</label>
             <InputSelect id="transaction-account" @bind-Value="editTransaction.AccountId">
                 <option value="">Select an account</option>
@@ -42,7 +51,7 @@
             <ValidationMessage For="@(() => editTransaction.AccountId)" />
         </div>
 
-        <div>
+        <div class="form-field">
             <label for="transaction-category">Category</label>
             <InputSelect id="transaction-category" @bind-Value="editTransaction.CategoryId">
                 <option value="">Select a category</option>
@@ -54,27 +63,31 @@
             <ValidationMessage For="@(() => editTransaction.CategoryId)" />
         </div>
 
-        <div>
+        <div class="form-field">
             <label for="transaction-date">Date</label>
             <InputDate id="transaction-date" @bind-Value="editTransaction.Date" />
             <ValidationMessage For="@(() => editTransaction.Date)" />
         </div>
 
-        <div>
+        <div class="form-field form-field-full">
             <label for="transaction-merchant-source">@MerchantSourceLabel</label>
             <InputText id="transaction-merchant-source" @bind-Value="editTransaction.MerchantSource" />
             <ValidationMessage For="@(() => editTransaction.MerchantSource)" />
         </div>
 
-        <div>
+        <div class="form-field form-field-full">
             <label for="transaction-description">Description (optional)</label>
             <InputTextArea id="transaction-description" @bind-Value="editTransaction.Description" />
         </div>
 
-        <button type="submit">Save Changes</button>
-        <a href="/transactions">Cancel</a>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="app-button app-button-primary">Save Changes</button>
+            <a class="app-button app-button-secondary" href="/transactions">Cancel</a>
+        </div>
     </EditForm>
 }
+</div>
 
 @code {
     [Parameter]

@@ -12,16 +12,52 @@
 }
 
 .navbar-toggler:checked {
-    background-color: rgba(255, 255, 255, 0.5);
+    background-color: rgba(255, 255, 255, 0.18);
 }
 
 .top-row {
-    min-height: 3.5rem;
-    background-color: rgba(0,0,0,0.4);
+    min-height: 4.5rem;
+    background-color: transparent;
 }
 
 .navbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: #fff;
+    font-size: 1rem;
+    text-decoration: none;
+}
+
+.navbar-brand strong,
+.navbar-brand small {
+    display: block;
+}
+
+.navbar-brand strong {
     font-size: 1.1rem;
+    letter-spacing: -0.02em;
+}
+
+.navbar-brand small {
+    margin-top: 0.05rem;
+    color: #a8c2b9;
+    font-size: 0.68rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.brand-mark {
+    display: grid;
+    width: 2.15rem;
+    height: 2.15rem;
+    place-items: center;
+    border-radius: 0.7rem;
+    background: #5bd2a1;
+    color: #0d2a23;
+    font-size: 1.05rem;
+    font-weight: 800;
 }
 
 .bi {
@@ -68,11 +104,11 @@
 
 .nav-item {
     font-size: 0.9rem;
-    padding-bottom: 0.5rem;
+    padding-bottom: 0.2rem;
 }
 
     .nav-item:first-of-type {
-        padding-top: 1rem;
+        padding-top: 0.25rem;
     }
 
     .nav-item:last-of-type {
@@ -80,25 +116,58 @@
     }
 
     .nav-item ::deep .nav-link {
-        color: #d7d7d7;
+        gap: 0.7rem;
+        color: #bfd0ca;
         background: none;
         border: none;
-        border-radius: 4px;
-        height: 3rem;
+        border-radius: 0.65rem;
+        min-height: 2.7rem;
         display: flex;
         align-items: center;
-        line-height: 3rem;
+        line-height: 1.25;
+        padding: 0.65rem 0.8rem;
         width: 100%;
     }
 
 .nav-item ::deep a.active {
-    background-color: rgba(255,255,255,0.37);
+    background-color: #204a40;
     color: white;
+    box-shadow: inset 3px 0 #5bd2a1;
 }
 
 .nav-item ::deep .nav-link:hover {
-    background-color: rgba(255,255,255,0.1);
+    background-color: rgba(255,255,255,0.07);
     color: white;
+}
+
+.nav-section-label {
+    margin: 1.15rem 1.5rem 0.45rem;
+    color: #79978d;
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+}
+
+.nav-icon {
+    display: inline-grid;
+    width: 1.25rem;
+    height: 1.25rem;
+    flex: 0 0 1.25rem;
+    place-items: center;
+    color: #78dbb2;
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.user-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.public-home-link {
+    margin-top: 1rem;
 }
 
 .nav-scrollable {
@@ -119,7 +188,7 @@
         display: block;
 
         /* Allow sidebar to scroll for tall menus */
-        height: calc(100vh - 3.5rem);
+        height: calc(100vh - 4.5rem);
         overflow-y: auto;
     }
 }

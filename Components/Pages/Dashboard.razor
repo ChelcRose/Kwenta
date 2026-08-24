@@ -10,156 +10,147 @@
 
 <PageTitle>Dashboard</PageTitle>
 
-<h1>Dashboard</h1>
+<div class="app-page">
+<header class="page-header">
+    <div>
+        <h1>Financial overview</h1>
+        <p class="page-subtitle">Your balances, monthly activity, budgets, and goals in one place.</p>
+    </div>
+    <span class="badge-soft badge-neutral">@currentMonthName</span>
+</header>
 
-<section>
-    <h2>Overview</h2>
-    <p>Total Balance: @FormatPeso(totalBalance)</p>
-    <p>Income This Month: @FormatPeso(currentMonthIncome)</p>
-    <p>Expenses This Month: @FormatPeso(currentMonthExpenses)</p>
-    <p>Saved This Month: @FormatPeso(amountSavedThisMonth)</p>
-    <p>Remaining Budget: @FormatPeso(totalRemainingBudget)</p>
+<section class="metric-grid" aria-label="Financial summary">
+    <article class="surface-card metric-card metric-card-primary">
+        <span class="metric-label">Total balance</span>
+        <strong class="metric-value">@FormatPeso(totalBalance)</strong>
+    </article>
+    <article class="surface-card metric-card">
+        <span class="metric-label">Income this month</span>
+        <strong class="metric-value money-positive">@FormatPeso(currentMonthIncome)</strong>
+    </article>
+    <article class="surface-card metric-card">
+        <span class="metric-label">Expenses this month</span>
+        <strong class="metric-value money-negative">@FormatPeso(currentMonthExpenses)</strong>
+    </article>
+    <article class="surface-card metric-card">
+        <span class="metric-label">Saved this month</span>
+        <strong class="metric-value @(amountSavedThisMonth < 0 ? "money-negative" : "money-positive")">@FormatPeso(amountSavedThisMonth)</strong>
+    </article>
+    <article class="surface-card metric-card">
+        <span class="metric-label">Remaining budget</span>
+        <strong class="metric-value @(totalRemainingBudget < 0 ? "money-negative" : "")">@FormatPeso(totalRemainingBudget)</strong>
+    </article>
 </section>
 
-<section>
-    <h2>Account Balances</h2>
+<div class="dashboard-grid">
+    <div class="dashboard-stack">
+        <section class="surface-card section-card">
+            <div class="section-bar">
+                <h2>Recent transactions</h2>
+                <a class="text-action" href="/transactions">View all</a>
+            </div>
+            @if (recentTransactions.Count == 0)
+            {
+                <div class="empty-state">No transactions yet.</div>
+            }
+            else
+            {
+                <div class="data-table-wrap">
+                <table class="data-table">
+                    <thead><tr><th>Amount</th><th>Type</th><th>Details</th><th>Account</th><th>Date</th></tr></thead>
+                    <tbody>
+                    @foreach (var transaction in recentTransactions)
+                    {
+                        <tr>
+                            <td data-label="Amount" class="money-value @(transaction.Type == TransactionType.Income ? "money-positive" : "money-negative")">@FormatPeso(transaction.Amount)</td>
+                            <td data-label="Type"><span class="badge-soft @(transaction.Type == TransactionType.Income ? "badge-income" : "badge-expense")">@transaction.Type</span></td>
+                            <td data-label="Details"><strong>@transaction.Category.Name</strong><div class="detail-meta">@transaction.Merchant</div></td>
+                            <td data-label="Account">@transaction.FinancialAccount.Name</td>
+                            <td data-label="Date">@transaction.Date.ToString("MMM d, yyyy", PhilippineCulture)</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+                </div>
+            }
+        </section>
 
-    @if (accountBalances.Count == 0)
-    {
-        <p>No active accounts yet.</p>
-    }
-    else
-    {
-        <table>
-            <thead>
-                <tr>
-                    <th>Name</th>
-                    <th>Provider</th>
-                    <th>Balance</th>
-                </tr>
-            </thead>
-            <tbody>
+        <section class="surface-card section-card">
+            <div class="section-bar"><h2>Budget progress</h2><span class="muted-text">@currentMonthName</span></div>
+            @if (budgetProgress.Count == 0)
+            {
+                <div class="empty-state">No budgets for this month.</div>
+            }
+            else
+            {
+                <div class="data-table-wrap">
+                <table class="data-table">
+                    <thead><tr><th>Category</th><th>Limit</th><th>Spent</th><th>Remaining</th><th>Used</th></tr></thead>
+                    <tbody>
+                    @foreach (var progress in budgetProgress)
+                    {
+                        <tr>
+                            <td data-label="Category"><strong>@progress.Budget.Category.Name</strong><div class="detail-meta"><span class="badge-soft @(progress.IsOverBudget ? "badge-danger" : "badge-success")">@(progress.IsOverBudget ? "Over budget" : "Within budget")</span></div></td>
+                            <td data-label="Limit" class="money-value">@FormatPeso(progress.Budget.LimitAmount)</td>
+                            <td data-label="Spent" class="money-value">@FormatPeso(progress.AmountSpent)</td>
+                            <td data-label="Remaining" class="money-value @(progress.Remaining < 0 ? "money-negative" : "")">@FormatPeso(progress.Remaining)</td>
+                            <td data-label="Used">
+                                <div class="progress-copy"><strong>@FormatPercentage(progress.PercentageUsed)</strong></div>
+                                <div class="progress-track" aria-hidden="true"><div class="progress-fill @(progress.IsOverBudget ? "progress-fill-over" : "")" style="width: @Math.Clamp(progress.PercentageUsed, 0, 100)%"></div></div>
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+                </div>
+            }
+        </section>
+    </div>
+
+    <aside class="dashboard-stack">
+        <section class="surface-card section-card">
+            <div class="section-bar"><h2>Account balances</h2><a class="text-action" href="/accounts">Manage</a></div>
+            @if (accountBalances.Count == 0)
+            {
+                <div class="empty-state">No active accounts yet.</div>
+            }
+            else
+            {
+                <div class="dashboard-list">
                 @foreach (var account in accountBalances)
                 {
-                    <tr>
-                        <td>@account.Account.Name</td>
-                        <td>@(string.IsNullOrWhiteSpace(account.Account.Provider) ? "—" : account.Account.Provider)</td>
-                        <td>@FormatPeso(account.CurrentBalance)</td>
-                    </tr>
+                    <div class="dashboard-list-item">
+                        <div><strong>@account.Account.Name</strong><div class="detail-meta">@(string.IsNullOrWhiteSpace(account.Account.Provider) ? account.Account.AccountType : account.Account.Provider)</div></div>
+                        <strong class="money-value">@FormatPeso(account.CurrentBalance)</strong>
+                    </div>
                 }
-            </tbody>
-        </table>
-    }
-</section>
+                </div>
+            }
+        </section>
 
-<section>
-    <h2>Recent Transactions</h2>
-
-    @if (recentTransactions.Count == 0)
-    {
-        <p>No transactions yet.</p>
-    }
-    else
-    {
-        <table>
-            <thead>
-                <tr>
-                    <th>Amount</th>
-                    <th>Type</th>
-                    <th>Category</th>
-                    <th>Account</th>
-                    <th>Date</th>
-                    <th>Merchant/Source</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var transaction in recentTransactions)
-                {
-                    <tr>
-                        <td>@FormatPeso(transaction.Amount)</td>
-                        <td>@transaction.Type</td>
-                        <td>@transaction.Category.Name</td>
-                        <td>@transaction.FinancialAccount.Name</td>
-                        <td>@transaction.Date.ToString("MMM d, yyyy", PhilippineCulture)</td>
-                        <td>@transaction.Merchant</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    }
-</section>
-
-<section>
-    <h2>Budget Progress — @currentMonthName</h2>
-
-    @if (budgetProgress.Count == 0)
-    {
-        <p>No budgets for this month.</p>
-    }
-    else
-    {
-        <table>
-            <thead>
-                <tr>
-                    <th>Category</th>
-                    <th>Limit</th>
-                    <th>Spent</th>
-                    <th>Remaining</th>
-                    <th>Used</th>
-                    <th>Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var progress in budgetProgress)
-                {
-                    <tr>
-                        <td>@progress.Budget.Category.Name</td>
-                        <td>@FormatPeso(progress.Budget.LimitAmount)</td>
-                        <td>@FormatPeso(progress.AmountSpent)</td>
-                        <td>@FormatPeso(progress.Remaining)</td>
-                        <td>@FormatPercentage(progress.PercentageUsed)</td>
-                        <td>@(progress.IsOverBudget ? "Over budget" : "Within budget")</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    }
-</section>
-
-<section>
-    <h2>Active Savings Goals</h2>
-
-    @if (savingsGoalProgress.Count == 0)
-    {
-        <p>No savings goals yet.</p>
-    }
-    else
-    {
-        <table>
-            <thead>
-                <tr>
-                    <th>Name</th>
-                    <th>Target</th>
-                    <th>Saved</th>
-                    <th>Remaining</th>
-                    <th>Progress</th>
-                </tr>
-            </thead>
-            <tbody>
+        <section class="surface-card section-card">
+            <div class="section-bar"><h2>Savings goals</h2><a class="text-action" href="/savings-goals">View all</a></div>
+            @if (savingsGoalProgress.Count == 0)
+            {
+                <div class="empty-state">No savings goals yet.</div>
+            }
+            else
+            {
+                <div class="goal-list">
                 @foreach (var progress in savingsGoalProgress)
                 {
-                    <tr>
-                        <td>@progress.Goal.Name</td>
-                        <td>@FormatPeso(progress.Goal.TargetAmount)</td>
-                        <td>@FormatPeso(progress.Goal.CurrentSavedAmount)</td>
-                        <td>@FormatPeso(progress.Remaining)</td>
-                        <td>@FormatPercentage(progress.PercentageProgress)</td>
-                    </tr>
+                    <article class="goal-list-item">
+                        <div class="detail-card-header"><strong>@progress.Goal.Name</strong><span class="badge-soft badge-neutral">@FormatPercentage(progress.PercentageProgress)</span></div>
+                        <div class="progress-copy"><span>@FormatPeso(progress.Goal.CurrentSavedAmount) saved</span><span>@FormatPeso(progress.Remaining) left</span></div>
+                        <div class="progress-track" aria-hidden="true"><div class="progress-fill" style="width: @Math.Clamp(progress.PercentageProgress, 0, 100)%"></div></div>
+                    </article>
                 }
-            </tbody>
-        </table>
-    }
-</section>
+                </div>
+            }
+        </section>
+    </aside>
+</div>
+</div>
 
 @code {
     private static readonly CultureInfo PhilippineCulture = CultureInfo.GetCultureInfo("en-PH");

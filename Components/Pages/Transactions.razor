@@ -8,15 +8,26 @@
 @inject ApplicationDbContext Db
 @inject AuthenticationStateProvider AuthenticationStateProvider
 
-<h3>Transaction History</h3>
+<div class="app-page">
+<header class="page-header">
+    <div>
+        <h1>Transactions</h1>
+        <p class="page-subtitle">A complete record of your income and expenses, newest first.</p>
+    </div>
+    <div class="inline-actions">
+        <a class="app-button app-button-secondary" href="/income/add">Add Income</a>
+        <a class="app-button app-button-primary" href="/expenses/add">Add Expense</a>
+    </div>
+</header>
 
 @if (transactions.Count == 0)
 {
-    <p>No transactions yet.</p>
+    <div class="empty-state">No transactions yet. Add income or an expense to get started.</div>
 }
 else
 {
-    <table>
+    <div class="surface-card data-table-wrap">
+    <table class="data-table">
         <thead>
             <tr>
                 <th>Amount</th>
@@ -33,22 +44,26 @@ else
             @foreach (var transaction in transactions)
             {
                 <tr>
-                    <td>@FormatPeso(transaction.Amount)</td>
-                    <td>@transaction.Type</td>
-                    <td>@transaction.Category.Name</td>
-                    <td>@transaction.FinancialAccount.Name</td>
-                    <td>@transaction.Date.ToString("MMM d, yyyy", CultureInfo.GetCultureInfo("en-PH"))</td>
-                    <td>@transaction.Merchant</td>
-                    <td>@(string.IsNullOrWhiteSpace(transaction.Description) ? "—" : transaction.Description)</td>
-                    <td>
-                        <a href="/transactions/edit/@transaction.Id">Edit</a>
-                        <a href="/transactions/delete/@transaction.Id">Delete</a>
+                    <td data-label="Amount" class="money-value @(transaction.Type == TransactionType.Income ? "money-positive" : "money-negative")">@FormatPeso(transaction.Amount)</td>
+                    <td data-label="Type"><span class="badge-soft @(transaction.Type == TransactionType.Income ? "badge-income" : "badge-expense")">@transaction.Type</span></td>
+                    <td data-label="Category">@transaction.Category.Name</td>
+                    <td data-label="Account">@transaction.FinancialAccount.Name</td>
+                    <td data-label="Date">@transaction.Date.ToString("MMM d, yyyy", CultureInfo.GetCultureInfo("en-PH"))</td>
+                    <td data-label="Merchant/Source">@transaction.Merchant</td>
+                    <td data-label="Description" class="muted-text">@(string.IsNullOrWhiteSpace(transaction.Description) ? "—" : transaction.Description)</td>
+                    <td data-label="Actions">
+                        <div class="inline-actions">
+                            <a class="text-action" href="/transactions/edit/@transaction.Id">Edit</a>
+                            <a class="text-action text-action-danger" href="/transactions/delete/@transaction.Id">Delete</a>
+                        </div>
                     </td>
                 </tr>
             }
         </tbody>
     </table>
+    </div>
 }
+</div>
 
 @code {
     private List<Transaction> transactions = [];

@@ -22,6 +22,8 @@ public sealed class TransactionAnalysisService(ApplicationDbContext db)
             .Where(transaction =>
                 transaction.UserId == userId &&
                 transaction.FinancialAccount.UserId == userId &&
+                ((transaction.Category.IsDefault && transaction.Category.UserId == null) ||
+                 (!transaction.Category.IsDefault && transaction.Category.UserId == userId)) &&
                 transaction.Date >= monthStart &&
                 transaction.Date < nextMonthStart &&
                 (transaction.Type == TransactionType.Expense ||

@@ -39,6 +39,9 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
 
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
 builder.Services.AddScoped<TransactionAnalysisService>();
+builder.Services.AddScoped<BudgetAnalysisService>();
+builder.Services.AddScoped<SavingsPerformanceAnalysisService>();
+builder.Services.AddScoped<SpendingComparisonAnalysisService>();
 builder.Services.AddHttpClient<IFinancialChatAiService, OpenAiFinancialChatService>(client =>
 {
     client.BaseAddress = new Uri("https://api.openai.com/");

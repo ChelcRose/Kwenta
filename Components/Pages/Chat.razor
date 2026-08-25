@@ -10,6 +10,8 @@
 @inject BudgetAnalysisService BudgetAnalysis
 @inject SavingsPerformanceAnalysisService SavingsPerformanceAnalysis
 @inject SpendingComparisonAnalysisService SpendingComparisonAnalysis
+@inject AffordabilityAnalysisService AffordabilityAnalysis
+@inject PurchasePlanAnalysisService PurchasePlanAnalysis
 @inject IFinancialChatAiService AiService
 @inject ILogger<Chat> Logger
 
@@ -19,7 +21,7 @@
     <header class="page-header">
         <div>
             <h1>Ask Kwenta</h1>
-            <p class="page-subtitle">Ask about recorded transactions, budgets, and monthly savings.</p>
+            <p class="page-subtitle">Ask about recorded transactions, budgets, monthly savings, and a potential purchase.</p>
         </div>
     </header>
 
@@ -100,7 +102,9 @@
         "Am I spending more than last month?",
         "How much did I spend last month?",
         "How has my spending changed from last month?",
-        "Compare my spending this month to last month."
+        "Compare my spending this month to last month.",
+        "Can I buy ₱180 milk tea?",
+        "Help me save for ₱11,000 AirPods."
     ];
 
     private readonly List<ChatMessage> messages = [];
@@ -121,7 +125,11 @@
 
         if (!FinancialChatQuestionRouter.TryRoute(questionText, out var route))
         {
-            errorMessage = "For now, please ask one of the supported transaction, budget, or savings questions.";
+            errorMessage = PurchaseQuestionParser.LooksLikePurchasePlanQuestion(questionText)
+                ? "Please use a clear PHP target and purchase name, such as: Help me save for ₱11,000 AirPods."
+                : PurchaseQuestionParser.LooksLikePurchaseQuestion(questionText)
+                    ? "Please use a clear PHP amount and purchase name, such as: Can I buy ₱180 milk tea?"
+                    : "For now, please ask one of the supported transaction, budget, savings, or purchase questions.";
             return;
         }
 
@@ -140,6 +148,18 @@
         try
         {
             var today = DateOnly.FromDateTime(DateTime.Today);
+            if (route.Question == FinancialChatQuestion.PurchasePlan)
+            {
+                await AnswerPurchasePlanQuestion(userId, today, questionText, route.Purchase!);
+                return;
+            }
+
+            if (route.Question == FinancialChatQuestion.PurchaseAffordability)
+            {
+                await AnswerPurchaseQuestion(userId, today, questionText, route.Purchase!);
+                return;
+            }
+
             if (IsBudgetQuestion(route.Question))
             {
                 await AnswerBudgetQuestion(userId, today, questionText, route);
@@ -322,6 +342,54 @@
     private static bool IsSpendingComparisonQuestion(FinancialChatQuestion question) => question is
         FinancialChatQuestion.PreviousMonthSpending or
         FinancialChatQuestion.SpendingComparison;
+
+    private async Task AnswerPurchaseQuestion(
+        string userId,
+        DateOnly today,
+        string questionText,
+        PurchaseRequest purchase)
+    {
+        var analysis = await AffordabilityAnalysis.GetAsync(userId, purchase, today);
+        var deterministicResponse = AffordabilityChatResponseBuilder.BuildDeterministicResponse(analysis);
+
+        if (analysis.ActiveAccountCount == 0)
+        {
+            messages.Add(new ChatMessage(false, deterministicResponse));
+            return;
+        }
+
+        var aiResult = await AiService.ExplainAsync(
+            FinancialChatQuestion.PurchaseAffordability,
+            questionText,
+            analysis.ToAiContext());
+
+        AddAiOrFallback(aiResult, deterministicResponse);
+    }
+
+    private async Task AnswerPurchasePlanQuestion(
+        string userId,
+        DateOnly today,
+        string questionText,
+        PurchaseRequest purchase)
+    {
+        var plan = await PurchasePlanAnalysis.GetAsync(userId, purchase, today);
+        var deterministicResponse = PurchasePlanChatResponseBuilder.BuildDeterministicResponse(plan);
+
+        if (plan.Affordability.ActiveAccountCount == 0 ||
+            plan.TargetGap <= 0 ||
+            plan.SuggestedMonthlyContribution <= 0)
+        {
+            messages.Add(new ChatMessage(false, deterministicResponse));
+            return;
+        }
+
+        var aiResult = await AiService.ExplainAsync(
+            FinancialChatQuestion.PurchasePlan,
+            questionText,
+            plan.ToAiContext());
+
+        AddAiOrFallback(aiResult, deterministicResponse);
+    }
 
     private sealed record ChatMessage(bool IsUser, string Text);
 

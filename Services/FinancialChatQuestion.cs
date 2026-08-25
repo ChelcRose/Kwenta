@@ -14,10 +14,15 @@ public enum FinancialChatQuestion
     PreviousMonthSavings,
     SavingsComparison,
     PreviousMonthSpending,
-    SpendingComparison
+    SpendingComparison,
+    PurchaseAffordability,
+    PurchasePlan
 }
 
-public sealed record FinancialChatRoute(FinancialChatQuestion Question, string? CategoryName = null);
+public sealed record FinancialChatRoute(
+    FinancialChatQuestion Question,
+    string? CategoryName = null,
+    PurchaseRequest? Purchase = null);
 
 public static class FinancialChatQuestionRouter
 {
@@ -26,6 +31,18 @@ public static class FinancialChatQuestionRouter
 
     public static bool TryRoute(string question, out FinancialChatRoute route)
     {
+        if (PurchaseQuestionParser.TryParsePlan(question, out var purchasePlan))
+        {
+            route = new(FinancialChatQuestion.PurchasePlan, Purchase: purchasePlan);
+            return true;
+        }
+
+        if (PurchaseQuestionParser.TryParse(question, out var purchase))
+        {
+            route = new(FinancialChatQuestion.PurchaseAffordability, Purchase: purchase);
+            return true;
+        }
+
         var normalized = question.Trim().TrimEnd('?', '.', '!').ToLowerInvariant();
 
         route = normalized switch

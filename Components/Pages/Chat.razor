@@ -1,0 +1,333 @@
+@page "/chat"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using System.ComponentModel.DataAnnotations
+@using System.Security.Claims
+@using Kwenta.Services
+@using Microsoft.AspNetCore.Authorization
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject TransactionAnalysisService TransactionAnalysis
+@inject BudgetAnalysisService BudgetAnalysis
+@inject SavingsPerformanceAnalysisService SavingsPerformanceAnalysis
+@inject SpendingComparisonAnalysisService SpendingComparisonAnalysis
+@inject IFinancialChatAiService AiService
+@inject ILogger<Chat> Logger
+
+<PageTitle>Ask Kwenta</PageTitle>
+
+<div class="app-page chat-page">
+    <header class="page-header">
+        <div>
+            <h1>Ask Kwenta</h1>
+            <p class="page-subtitle">Ask about recorded transactions, budgets, and monthly savings.</p>
+        </div>
+    </header>
+
+    <section class="surface-card chat-card" aria-label="Financial chat">
+        <div class="chat-suggestions" aria-label="Supported questions">
+            @foreach (var suggestion in SupportedQuestions)
+            {
+                <button type="button" class="chat-suggestion" @onclick="() => UseSuggestion(suggestion)" disabled="@isLoading">
+                    @suggestion
+                </button>
+            }
+        </div>
+
+        <div class="chat-conversation" aria-live="polite" aria-busy="@isLoading">
+            @if (messages.Count == 0)
+            {
+                <div class="empty-state chat-empty">
+                    Choose one of the supported questions above or type it below.
+                </div>
+            }
+            else
+            {
+                @foreach (var message in messages)
+                {
+                    <article class="chat-message @(message.IsUser ? "chat-message-user" : "chat-message-assistant")">
+                        <span class="chat-message-label">@(message.IsUser ? "You" : "Kwenta")</span>
+                        <p>@message.Text</p>
+                    </article>
+                }
+            }
+
+            @if (isLoading)
+            {
+                <div class="chat-loading" role="status">
+                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                    Reviewing your finances…
+                </div>
+            }
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(errorMessage))
+        {
+            <div class="chat-error" role="alert">@errorMessage</div>
+        }
+
+        <EditForm Model="input" OnValidSubmit="SendMessage" FormName="FinancialChat" class="chat-form">
+            <DataAnnotationsValidator />
+            <label for="chat-message" class="visually-hidden">Ask a financial question</label>
+            <div class="chat-input-wrap">
+                <InputText id="chat-message"
+                           class="form-control"
+                           @bind-Value="input.Message"
+                           placeholder="How much did I spend this month?"
+                           autocomplete="off"
+                           disabled="@isLoading" />
+                <ValidationMessage For="() => input.Message" class="chat-validation" />
+            </div>
+            <button type="submit" class="app-button app-button-primary" disabled="@isLoading">Send</button>
+        </EditForm>
+    </section>
+</div>
+
+@code {
+    private static readonly string[] SupportedQuestions =
+    [
+        "How much did I spend this month?",
+        "How much income did I receive this month?",
+        "Where did most of my money go this month?",
+        "What was my biggest expense this month?",
+        "How much budget do I have left this month?",
+        "Am I over budget anywhere this month?",
+        "How much do I have left for Food this month?",
+        "Which budget is closest to being used up?",
+        "Am I saving more than last month?",
+        "How much did I save this month?",
+        "How much did I save last month?",
+        "How have my savings changed from last month?",
+        "Am I spending more than last month?",
+        "How much did I spend last month?",
+        "How has my spending changed from last month?",
+        "Compare my spending this month to last month."
+    ];
+
+    private readonly List<ChatMessage> messages = [];
+    private ChatInput input = new();
+    private bool isLoading;
+    private string? errorMessage;
+
+    private void UseSuggestion(string suggestion)
+    {
+        input.Message = suggestion;
+        errorMessage = null;
+    }
+
+    private async Task SendMessage()
+    {
+        var questionText = input.Message.Trim();
+        errorMessage = null;
+
+        if (!FinancialChatQuestionRouter.TryRoute(questionText, out var route))
+        {
+            errorMessage = "For now, please ask one of the supported transaction, budget, or savings questions.";
+            return;
+        }
+
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var userId = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (userId is null)
+        {
+            errorMessage = "Please log in again to ask about your finances.";
+            return;
+        }
+
+        messages.Add(new ChatMessage(true, questionText));
+        input = new();
+        isLoading = true;
+
+        try
+        {
+            var today = DateOnly.FromDateTime(DateTime.Today);
+            if (IsBudgetQuestion(route.Question))
+            {
+                await AnswerBudgetQuestion(userId, today, questionText, route);
+                return;
+            }
+
+            if (IsSavingsQuestion(route.Question))
+            {
+                await AnswerSavingsQuestion(userId, today, questionText, route.Question);
+                return;
+            }
+
+            if (IsSpendingComparisonQuestion(route.Question))
+            {
+                await AnswerSpendingComparisonQuestion(userId, today, questionText, route.Question);
+                return;
+            }
+
+            await AnswerTransactionQuestion(userId, today, questionText, route.Question);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to load the current user's financial analysis.");
+            errorMessage = "Kwenta couldn't load your financial summary. Please try again.";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task AnswerTransactionQuestion(
+        string userId,
+        DateOnly today,
+        string questionText,
+        FinancialChatQuestion question)
+    {
+        var analysis = await TransactionAnalysis.GetCurrentMonthAsync(userId, today);
+        var deterministicResponse = FinancialChatResponseBuilder.BuildDeterministicResponse(question, analysis);
+
+        if (analysis.TransactionCount == 0)
+        {
+            messages.Add(new ChatMessage(false, deterministicResponse));
+            return;
+        }
+
+        var aiResult = await AiService.ExplainAsync(
+            question,
+            questionText,
+            analysis.ToAiContext(
+                includeLargestExpenseDescription:
+                    question == FinancialChatQuestion.LargestExpense));
+
+        AddAiOrFallback(aiResult, deterministicResponse);
+    }
+
+    private async Task AnswerBudgetQuestion(
+        string userId,
+        DateOnly today,
+        string questionText,
+        FinancialChatRoute route)
+    {
+        var analysis = await BudgetAnalysis.GetCurrentMonthAsync(userId, today);
+        if (!analysis.HasBudgets)
+        {
+            messages.Add(new ChatMessage(false, BudgetChatResponseBuilder.NoBudgets(analysis.MonthName)));
+            return;
+        }
+
+        BudgetAnalysisService.BudgetProgressFact? selectedBudget = null;
+        if (route.Question == FinancialChatQuestion.CategoryBudgetRemaining)
+        {
+            var match = analysis.ResolveCategory(route.CategoryName!);
+            if (match.Status == BudgetAnalysisService.BudgetCategoryMatchStatus.NotFound)
+            {
+                messages.Add(new ChatMessage(
+                    false,
+                    BudgetChatResponseBuilder.CategoryNotFound(route.CategoryName!, analysis.MonthName)));
+                return;
+            }
+
+            if (match.Status == BudgetAnalysisService.BudgetCategoryMatchStatus.Ambiguous)
+            {
+                messages.Add(new ChatMessage(
+                    false,
+                    BudgetChatResponseBuilder.CategoryAmbiguous(route.CategoryName!, analysis.MonthName)));
+                return;
+            }
+
+            selectedBudget = match.Budget;
+        }
+
+        var deterministicResponse = BudgetChatResponseBuilder.BuildDeterministicResponse(
+            route.Question,
+            analysis,
+            selectedBudget);
+        var aiResult = await AiService.ExplainAsync(
+            route.Question,
+            questionText,
+            analysis.ToAiContext(route.Question, selectedBudget));
+
+        AddAiOrFallback(aiResult, deterministicResponse);
+    }
+
+    private void AddAiOrFallback(FinancialChatAiResult aiResult, string deterministicResponse)
+    {
+        if (aiResult.IsSuccess)
+        {
+            messages.Add(new ChatMessage(false, aiResult.Response!));
+            return;
+        }
+
+        messages.Add(new ChatMessage(false, deterministicResponse));
+        errorMessage = aiResult.IsConfigured
+            ? "Kwenta's AI explanation is temporarily unavailable. The calculated answer is shown instead."
+            : "AI is not configured yet. The calculated answer is shown instead.";
+    }
+
+    private static bool IsBudgetQuestion(FinancialChatQuestion question) => question is
+        FinancialChatQuestion.TotalBudgetRemaining or
+        FinancialChatQuestion.OverBudgetCategories or
+        FinancialChatQuestion.CategoryBudgetRemaining or
+        FinancialChatQuestion.ClosestBudgetToUsedUp;
+
+    private async Task AnswerSavingsQuestion(
+        string userId,
+        DateOnly today,
+        string questionText,
+        FinancialChatQuestion question)
+    {
+        var analysis = await SavingsPerformanceAnalysis.GetAsync(userId, today);
+        var deterministicResponse = SavingsPerformanceChatResponseBuilder.BuildDeterministicResponse(
+            question,
+            analysis);
+
+        if (!analysis.HasDataFor(question))
+        {
+            messages.Add(new ChatMessage(false, deterministicResponse));
+            return;
+        }
+
+        var aiResult = await AiService.ExplainAsync(
+            question,
+            questionText,
+            analysis.ToAiContext(question));
+
+        AddAiOrFallback(aiResult, deterministicResponse);
+    }
+
+    private static bool IsSavingsQuestion(FinancialChatQuestion question) => question is
+        FinancialChatQuestion.CurrentMonthSavings or
+        FinancialChatQuestion.PreviousMonthSavings or
+        FinancialChatQuestion.SavingsComparison;
+
+    private async Task AnswerSpendingComparisonQuestion(
+        string userId,
+        DateOnly today,
+        string questionText,
+        FinancialChatQuestion question)
+    {
+        var analysis = await SpendingComparisonAnalysis.GetAsync(userId, today);
+        var deterministicResponse = SpendingComparisonChatResponseBuilder.BuildDeterministicResponse(
+            question,
+            analysis);
+
+        if (!analysis.HasDataFor(question))
+        {
+            messages.Add(new ChatMessage(false, deterministicResponse));
+            return;
+        }
+
+        var aiResult = await AiService.ExplainAsync(
+            question,
+            questionText,
+            analysis.ToAiContext(question));
+
+        AddAiOrFallback(aiResult, deterministicResponse);
+    }
+
+    private static bool IsSpendingComparisonQuestion(FinancialChatQuestion question) => question is
+        FinancialChatQuestion.PreviousMonthSpending or
+        FinancialChatQuestion.SpendingComparison;
+
+    private sealed record ChatMessage(bool IsUser, string Text);
+
+    private sealed class ChatInput
+    {
+        [Required(ErrorMessage = "Enter a question before sending.")]
+        public string Message { get; set; } = string.Empty;
+    }
+}

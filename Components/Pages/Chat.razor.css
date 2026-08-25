@@ -1,0 +1,145 @@
+.chat-page {
+    max-width: 920px;
+}
+
+.chat-card {
+    padding: clamp(1rem, 3vw, 1.5rem);
+}
+
+.chat-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    margin-bottom: 1.25rem;
+}
+
+.chat-suggestion {
+    border: 1px solid #cfdcd5;
+    border-radius: 999px;
+    background: #f7faf8;
+    color: #315249;
+    padding: 0.5rem 0.8rem;
+    font-size: 0.82rem;
+    text-align: left;
+}
+
+.chat-suggestion:hover:not(:disabled) {
+    border-color: #8fb5a5;
+    background: #edf6f1;
+}
+
+.chat-conversation {
+    display: flex;
+    min-height: 300px;
+    max-height: 55vh;
+    flex-direction: column;
+    gap: 0.85rem;
+    overflow-y: auto;
+    border: 1px solid #e1e8e4;
+    border-radius: 0.85rem;
+    background: #f8faf9;
+    padding: 1rem;
+}
+
+.chat-empty {
+    margin: auto;
+}
+
+.chat-message {
+    max-width: min(78%, 620px);
+    border-radius: 0.85rem;
+    padding: 0.75rem 0.9rem;
+}
+
+.chat-message p {
+    margin: 0.2rem 0 0;
+    white-space: pre-wrap;
+}
+
+.chat-message-label {
+    font-size: 0.7rem;
+    font-weight: 750;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.chat-message-user {
+    align-self: flex-end;
+    background: #177557;
+    color: #fff;
+}
+
+.chat-message-assistant {
+    align-self: flex-start;
+    border: 1px solid #dce6e1;
+    background: #fff;
+    color: #263b34;
+}
+
+.chat-message-assistant .chat-message-label {
+    color: #177557;
+}
+
+.chat-loading {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    color: #64756d;
+    font-size: 0.86rem;
+}
+
+.chat-error {
+    margin-top: 0.8rem;
+    border: 1px solid #edc7cb;
+    border-radius: 0.65rem;
+    background: #fff2f3;
+    color: #8e2630;
+    padding: 0.65rem 0.8rem;
+    font-size: 0.84rem;
+}
+
+.chat-form {
+    display: flex;
+    gap: 0.7rem;
+    margin-top: 1rem;
+}
+
+.chat-input-wrap {
+    flex: 1;
+}
+
+.chat-form .form-control {
+    min-height: 3rem;
+    border-color: #cdd9d3;
+    border-radius: 0.7rem;
+}
+
+.chat-form .form-control:focus {
+    border-color: #177557;
+    box-shadow: 0 0 0 3px rgba(23, 117, 87, 0.13);
+}
+
+.chat-validation {
+    display: block;
+    margin-top: 0.4rem;
+    color: #b4232f;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+@media (max-width: 640px) {
+    .chat-message {
+        max-width: 92%;
+    }
+
+    .chat-form {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .chat-form .app-button,
+    .chat-input-wrap {
+        justify-content: center;
+        width: 100%;
+    }
+}

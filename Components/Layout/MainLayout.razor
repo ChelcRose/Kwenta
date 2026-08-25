@@ -1,12 +1,18 @@
 ﻿@inherits LayoutComponentBase
 
 <div class="page">
+    <input class="sidebar-toggle" type="checkbox" id="sidebar-toggle" aria-label="Toggle navigation sidebar" />
+
     <div class="sidebar">
         <NavMenu />
     </div>
 
     <main>
         <div class="top-row px-4">
+            <label class="sidebar-toggle-button" for="sidebar-toggle" title="Toggle navigation">
+                <span aria-hidden="true">☰</span>
+                <span class="visually-hidden">Toggle navigation sidebar</span>
+            </label>
             <span class="top-row-copy">Your money, made clear.</span>
         </div>
 

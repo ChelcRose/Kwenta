@@ -14,6 +14,11 @@ main {
     background: #102a25;
 }
 
+.sidebar-toggle,
+.sidebar-toggle-button {
+    display: none;
+}
+
 .top-row {
     background-color: rgba(247, 249, 247, 0.92);
     border-bottom: 1px solid #e2e8e4;
@@ -47,9 +52,54 @@ main {
 
     .sidebar {
         width: 264px;
+        flex: 0 0 264px;
         height: 100vh;
+        overflow: hidden;
         position: sticky;
         top: 0;
+        transition: width 180ms ease, flex-basis 180ms ease;
+    }
+
+    .sidebar-toggle {
+        display: block;
+        position: fixed;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .sidebar-toggle-button {
+        display: inline-grid;
+        width: 2.25rem;
+        height: 2.25rem;
+        flex: 0 0 2.25rem;
+        margin-right: auto;
+        place-items: center;
+        border: 1px solid #d8e1dc;
+        border-radius: 0.6rem;
+        background: #fff;
+        color: #28483f;
+        cursor: pointer;
+        font-size: 1.15rem;
+        line-height: 1;
+        transition: background-color 140ms ease, border-color 140ms ease;
+    }
+
+    .sidebar-toggle-button:hover {
+        border-color: #b8cac1;
+        background: #edf5f1;
+    }
+
+    .sidebar-toggle:focus-visible ~ main .sidebar-toggle-button {
+        outline: 3px solid rgba(23, 117, 87, 0.24);
+        outline-offset: 2px;
+    }
+
+    .sidebar-toggle:checked + .sidebar {
+        width: 0;
+        flex-basis: 0;
     }
 
     .top-row {

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Kwenta.Components;
 using Kwenta.Components.Account;
 using Kwenta.Data;
+using Kwenta.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -37,6 +38,12 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
     .AddDefaultTokenProviders();
 
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
+builder.Services.AddScoped<TransactionAnalysisService>();
+builder.Services.AddHttpClient<IFinancialChatAiService, OpenAiFinancialChatService>(client =>
+{
+    client.BaseAddress = new Uri("https://api.openai.com/");
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
 
 var app = builder.Build();
 

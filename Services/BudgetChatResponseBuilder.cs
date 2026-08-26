@@ -31,6 +31,8 @@ public static class BudgetChatResponseBuilder
             $"You have {FormatPeso(selectedBudget.Remaining)} left for {selectedBudget.CategoryName} in {analysis.MonthName}. You have spent {FormatPeso(selectedBudget.AmountSpent)} of {FormatPeso(selectedBudget.LimitAmount)}.",
         FinancialChatQuestion.ClosestBudgetToUsedUp when analysis.ClosestToUsedUp is { } closest =>
             $"{closest.CategoryName} is closest to being used up at {FormatPercentage(closest.PercentageUsed)} used, with {FormatPeso(closest.Remaining)} remaining.",
+        FinancialChatQuestion.BudgetOverspendingProjection =>
+            BuildProjectionResponse(analysis),
         _ => "I don't have enough budget information to answer that question."
     };
 
@@ -39,4 +41,26 @@ public static class BudgetChatResponseBuilder
 
     private static string FormatPercentage(decimal percentage) =>
         $"{percentage.ToString("0.#", PhilippineCulture)}%";
+
+    private static string BuildProjectionResponse(MonthlyBudgetAnalysis analysis)
+    {
+        var budgetResults = analysis.Budgets.Select(budget =>
+        {
+            var status = budget.PaceStatus switch
+            {
+                BudgetPaceStatus.AlreadyOverBudget => "Already over budget",
+                BudgetPaceStatus.ProjectedToExceed => "Projected to exceed budget",
+                _ => "On pace to stay within budget"
+            };
+
+            return
+                $"{budget.CategoryName}: {status}. Spent {FormatPeso(budget.AmountSpent)} of {FormatPeso(budget.LimitAmount)}; " +
+                $"projected month-end spending is {FormatPeso(budget.ProjectedMonthEndSpending)} " +
+                $"({FormatPercentage(budget.ProjectedUsedPercentage)} used, projected overage {FormatPeso(budget.ProjectedOverage)}).";
+        });
+
+        return
+            $"Budget pace for {analysis.MonthName}, based on {analysis.DaysElapsed} of {analysis.DaysInMonth} days: " +
+            string.Join(" ", budgetResults);
+    }
 }

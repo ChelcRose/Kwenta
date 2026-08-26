@@ -16,6 +16,8 @@ public sealed class BudgetAnalysisService(ApplicationDbContext db)
     {
         var monthStart = new DateOnly(today.Year, today.Month, 1);
         var nextMonthStart = monthStart.AddMonths(1);
+        var daysElapsed = today.Day;
+        var daysInMonth = DateTime.DaysInMonth(today.Year, today.Month);
 
         var budgets = await db.Budgets
             .AsNoTracking()
@@ -36,7 +38,7 @@ public sealed class BudgetAnalysisService(ApplicationDbContext db)
 
         if (budgets.Count == 0)
         {
-            return MonthlyBudgetAnalysis.Empty(monthStart);
+            return MonthlyBudgetAnalysis.Empty(monthStart, daysElapsed, daysInMonth);
         }
 
         var categoryIds = budgets.Select(budget => budget.CategoryId).ToList();
@@ -71,11 +73,13 @@ public sealed class BudgetAnalysisService(ApplicationDbContext db)
                     budget.CategoryId,
                     budget.CategoryName,
                     budget.LimitAmount,
-                    amountSpent);
+                    amountSpent,
+                    daysElapsed,
+                    daysInMonth);
             })
             .ToList();
 
-        return new MonthlyBudgetAnalysis(monthStart, progress);
+        return new MonthlyBudgetAnalysis(monthStart, daysElapsed, daysInMonth, progress);
     }
 
     private sealed record BudgetDefinition(
@@ -89,17 +93,40 @@ public sealed class BudgetAnalysisService(ApplicationDbContext db)
         int CategoryId,
         string CategoryName,
         decimal LimitAmount,
-        decimal AmountSpent)
+        decimal AmountSpent,
+        int DaysElapsed,
+        int DaysInMonth)
     {
         public decimal Remaining => FinancialCalculations.BudgetRemaining(LimitAmount, AmountSpent);
 
         public decimal PercentageUsed => FinancialCalculations.BudgetPercentageUsed(LimitAmount, AmountSpent);
 
         public bool IsOverBudget => FinancialCalculations.IsOverBudget(LimitAmount, AmountSpent);
+
+        public decimal AverageDailySpending => AmountSpent / DaysElapsed;
+
+        public decimal ProjectedMonthEndSpending => AverageDailySpending * DaysInMonth;
+
+        public decimal ProjectedOverage => ProjectedMonthEndSpending - LimitAmount;
+
+        public bool ProjectedOverBudget => ProjectedMonthEndSpending > LimitAmount;
+
+        public decimal MonthElapsedPercentage => (decimal)DaysElapsed / DaysInMonth * 100;
+
+        public decimal ProjectedUsedPercentage =>
+            ProjectedMonthEndSpending / LimitAmount * 100;
+
+        public BudgetPaceStatus PaceStatus => IsOverBudget
+            ? BudgetPaceStatus.AlreadyOverBudget
+            : ProjectedOverBudget
+                ? BudgetPaceStatus.ProjectedToExceed
+                : BudgetPaceStatus.OnPace;
     }
 
     public sealed record MonthlyBudgetAnalysis(
         DateOnly MonthStart,
+        int DaysElapsed,
+        int DaysInMonth,
         IReadOnlyList<BudgetProgressFact> Budgets)
     {
         public string MonthName => MonthStart.ToString("MMMM yyyy", PhilippineCulture);
@@ -173,12 +200,27 @@ public sealed class BudgetAnalysisService(ApplicationDbContext db)
                     context.AppendLine("Budget closest to being used up:");
                     AppendBudget(context, closest);
                     break;
+
+                case FinancialChatQuestion.BudgetOverspendingProjection:
+                    context
+                        .AppendLine($"Current date: {MonthStart.AddDays(DaysElapsed - 1):MMMM d, yyyy}")
+                        .AppendLine($"Days elapsed: {DaysElapsed}")
+                        .AppendLine($"Days in month: {DaysInMonth}")
+                        .AppendLine("Budget spending pace:");
+                    foreach (var budget in Budgets)
+                    {
+                        AppendProjection(context, budget);
+                    }
+                    break;
             }
 
             return context.ToString().TrimEnd();
         }
 
-        public static MonthlyBudgetAnalysis Empty(DateOnly monthStart) => new(monthStart, []);
+        public static MonthlyBudgetAnalysis Empty(
+            DateOnly monthStart,
+            int daysElapsed,
+            int daysInMonth) => new(monthStart, daysElapsed, daysInMonth, []);
 
         private static void AppendBudgets(StringBuilder context, IReadOnlyList<BudgetProgressFact> budgets)
         {
@@ -205,6 +247,28 @@ public sealed class BudgetAnalysisService(ApplicationDbContext db)
                 .AppendLine($"  Over budget: {(budget.IsOverBudget ? "Yes" : "No")}");
         }
 
+        private static void AppendProjection(StringBuilder context, BudgetProgressFact budget)
+        {
+            context
+                .AppendLine($"- Category: {budget.CategoryName}")
+                .AppendLine($"  Limit: {FormatPeso(budget.LimitAmount)}")
+                .AppendLine($"  Spent so far: {FormatPeso(budget.AmountSpent)}")
+                .AppendLine($"  Current used: {FormatPercentage(budget.PercentageUsed)}")
+                .AppendLine($"  Month elapsed: {FormatPercentage(budget.MonthElapsedPercentage)}")
+                .AppendLine($"  Average daily spending: {FormatPeso(budget.AverageDailySpending)}")
+                .AppendLine($"  Projected month-end spending: {FormatPeso(budget.ProjectedMonthEndSpending)}")
+                .AppendLine($"  Projected used: {FormatPercentage(budget.ProjectedUsedPercentage)}")
+                .AppendLine($"  Projected overage: {FormatPeso(budget.ProjectedOverage)}")
+                .AppendLine($"  Status: {FormatPaceStatus(budget.PaceStatus)}");
+        }
+
+        private static string FormatPaceStatus(BudgetPaceStatus status) => status switch
+        {
+            BudgetPaceStatus.AlreadyOverBudget => "Already over budget",
+            BudgetPaceStatus.ProjectedToExceed => "Projected to exceed budget",
+            _ => "On pace to stay within budget"
+        };
+
         private static string NormalizeCategoryName(string categoryName) =>
             string.Join(' ', categoryName.Split(
                 ' ',
@@ -223,6 +287,13 @@ public sealed class BudgetAnalysisService(ApplicationDbContext db)
         Found,
         NotFound,
         Ambiguous
+    }
+
+    public enum BudgetPaceStatus
+    {
+        OnPace,
+        ProjectedToExceed,
+        AlreadyOverBudget
     }
 
     public sealed record BudgetCategoryMatch(

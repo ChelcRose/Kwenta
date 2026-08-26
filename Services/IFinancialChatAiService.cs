@@ -7,6 +7,23 @@ public interface IFinancialChatAiService
         string userQuestion,
         string financialContext,
         CancellationToken cancellationToken = default);
+
+    Task<ExpenseCategorySuggestionResult> SuggestExpenseCategoryAsync(
+        string merchant,
+        string description,
+        IReadOnlyList<string> validCategoryNames,
+        CancellationToken cancellationToken = default);
+}
+
+public sealed record ExpenseCategorySuggestionResult(
+    bool IsConfigured,
+    string? CategoryName)
+{
+    public static ExpenseCategorySuggestionResult Suggestion(string categoryName) =>
+        new(true, categoryName);
+
+    public static ExpenseCategorySuggestionResult NoSuggestion(bool isConfigured = true) =>
+        new(isConfigured, null);
 }
 
 public sealed record FinancialChatAiResult(bool IsSuccess, string? Response, bool IsConfigured)

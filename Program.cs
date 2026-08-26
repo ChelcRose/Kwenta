@@ -44,6 +44,7 @@ builder.Services.AddScoped<SavingsPerformanceAnalysisService>();
 builder.Services.AddScoped<SpendingComparisonAnalysisService>();
 builder.Services.AddScoped<AffordabilityAnalysisService>();
 builder.Services.AddScoped<PurchasePlanAnalysisService>();
+builder.Services.AddScoped<ExpenseDraftParserService>();
 builder.Services.AddHttpClient<IFinancialChatAiService, OpenAiFinancialChatService>(client =>
 {
     client.BaseAddress = new Uri("https://api.openai.com/");

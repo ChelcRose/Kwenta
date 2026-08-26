@@ -2,9 +2,13 @@
 @rendermode InteractiveServer
 @attribute [Authorize]
 @using System.ComponentModel.DataAnnotations
+@using System.Globalization
 @using System.Security.Claims
+@using Kwenta.Data
 @using Kwenta.Services
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Db
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject TransactionAnalysisService TransactionAnalysis
 @inject BudgetAnalysisService BudgetAnalysis
@@ -12,6 +16,7 @@
 @inject SpendingComparisonAnalysisService SpendingComparisonAnalysis
 @inject AffordabilityAnalysisService AffordabilityAnalysis
 @inject PurchasePlanAnalysisService PurchasePlanAnalysis
+@inject ExpenseDraftParserService ExpenseDraftParser
 @inject IFinancialChatAiService AiService
 @inject ILogger<Chat> Logger
 
@@ -62,6 +67,117 @@
             }
         </div>
 
+        @if (expenseConfirmation is not null)
+        {
+            <EditForm Model="expenseConfirmation"
+                      OnValidSubmit="ConfirmExpense"
+                      FormName="ConfirmParsedExpense"
+                      class="expense-draft"
+                      aria-labelledby="expense-draft-title">
+                <DataAnnotationsValidator />
+                <div class="expense-draft-heading">
+                    <div>
+                        <span class="chat-message-label">Review before saving</span>
+                        <h2 id="expense-draft-title">Confirm proposed expense</h2>
+                    </div>
+                    <span class="badge-soft badge-expense">Expense</span>
+                </div>
+
+                <ValidationSummary />
+
+                @if (!string.IsNullOrWhiteSpace(expenseConfirmationError))
+                {
+                    <p class="status-message status-error" role="alert">@expenseConfirmationError</p>
+                }
+
+                <div class="expense-confirmation-grid">
+                    <div class="form-field">
+                        <label for="parsed-expense-amount">Amount</label>
+                        <InputNumber id="parsed-expense-amount" @bind-Value="expenseConfirmation.Amount" step="0.01" />
+                        <ValidationMessage For="@(() => expenseConfirmation.Amount)" />
+                    </div>
+
+                    <div class="form-field">
+                        <label for="parsed-expense-account">Financial account</label>
+                        <InputSelect id="parsed-expense-account" @bind-Value="expenseConfirmation.AccountId">
+                            <option value="">Select an account</option>
+                            @foreach (var account in expenseAccounts)
+                            {
+                                <option value="@account.Id">@account.Name</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="@(() => expenseConfirmation.AccountId)" />
+                    </div>
+
+                    <div class="form-field">
+                        <label for="parsed-expense-category">Expense category</label>
+                        <InputSelect id="parsed-expense-category" @bind-Value="expenseConfirmation.CategoryId">
+                            <option value="">Select a category</option>
+                            @foreach (var category in expenseCategories)
+                            {
+                                <option value="@category.Id">@category.Name</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="@(() => expenseConfirmation.CategoryId)" />
+                    </div>
+
+                    <div class="form-field">
+                        <label for="parsed-expense-date">Date</label>
+                        <InputDate id="parsed-expense-date" @bind-Value="expenseConfirmation.Date" />
+                        <ValidationMessage For="@(() => expenseConfirmation.Date)" />
+                    </div>
+
+                    <div class="form-field form-field-full">
+                        <label for="parsed-expense-merchant">Merchant/payee</label>
+                        <InputText id="parsed-expense-merchant" @bind-Value="expenseConfirmation.Merchant" />
+                        <ValidationMessage For="@(() => expenseConfirmation.Merchant)" />
+                    </div>
+
+                    <div class="form-field form-field-full">
+                        <label for="parsed-expense-description">Description (optional)</label>
+                        <InputTextArea id="parsed-expense-description" @bind-Value="expenseConfirmation.Description" />
+                    </div>
+                </div>
+
+                @if (expenseDraftMissingFields.Count > 0)
+                {
+                    <div class="expense-draft-notice">
+                        <strong>Parser needs your review</strong>
+                        <p>Complete or verify: @string.Join(", ", expenseDraftMissingFields)</p>
+                    </div>
+                }
+
+                @if (expenseDraftWarnings.Count > 0)
+                {
+                    <div class="expense-draft-warnings">
+                        <strong>Parsing notes</strong>
+                        <ul>
+                            @foreach (var warning in expenseDraftWarnings)
+                            {
+                                <li>@warning</li>
+                            }
+                        </ul>
+                    </div>
+                }
+
+                <div class="expense-confirmation-actions">
+                    <button type="submit" class="app-button app-button-primary" disabled="@isSavingExpense">
+                        @(isSavingExpense ? "Saving…" : "Confirm Transaction")
+                    </button>
+                    <button type="button" class="app-button app-button-secondary" @onclick="DiscardExpenseDraft" disabled="@isSavingExpense">
+                        Cancel / Discard
+                    </button>
+                </div>
+
+                <p class="expense-draft-footnote">Nothing is saved until you press Confirm Transaction.</p>
+            </EditForm>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(expenseSaveSuccess))
+        {
+            <p class="status-message status-success expense-save-success" role="status">@expenseSaveSuccess</p>
+        }
+
         @if (!string.IsNullOrWhiteSpace(errorMessage))
         {
             <div class="chat-error" role="alert">@errorMessage</div>
@@ -90,11 +206,14 @@
         "How much did I spend this month?",
         "How much income did I receive this month?",
         "Where did most of my money go this month?",
+        "What is my top spending category this month?",
         "What was my biggest expense this month?",
+        "Did I have any unusually large expenses this month?",
         "How much budget do I have left this month?",
         "Am I over budget anywhere this month?",
         "How much do I have left for Food this month?",
         "Which budget is closest to being used up?",
+        "Am I likely to go over budget this month?",
         "Am I saving more than last month?",
         "How much did I save this month?",
         "How much did I save last month?",
@@ -104,11 +223,21 @@
         "How has my spending changed from last month?",
         "Compare my spending this month to last month.",
         "Can I buy ₱180 milk tea?",
-        "Help me save for ₱11,000 AirPods."
+        "Help me save for ₱11,000 AirPods.",
+        "Spent ₱180 on milk tea using GCash after class."
     ];
 
+    private static readonly CultureInfo PhilippineCulture = CultureInfo.GetCultureInfo("en-PH");
     private readonly List<ChatMessage> messages = [];
     private ChatInput input = new();
+    private ExpenseConfirmationInput? expenseConfirmation;
+    private List<FinancialAccount> expenseAccounts = [];
+    private List<Category> expenseCategories = [];
+    private IReadOnlyList<string> expenseDraftMissingFields = [];
+    private IReadOnlyList<string> expenseDraftWarnings = [];
+    private string? expenseConfirmationError;
+    private string? expenseSaveSuccess;
+    private bool isSavingExpense;
     private bool isLoading;
     private string? errorMessage;
 
@@ -122,8 +251,14 @@
     {
         var questionText = input.Message.Trim();
         errorMessage = null;
+        DiscardExpenseDraft();
+        expenseSaveSuccess = null;
 
-        if (!FinancialChatQuestionRouter.TryRoute(questionText, out var route))
+        var isExpenseEntry = ExpenseDraftParserService.LooksLikeExpenseEntry(questionText);
+        FinancialChatRoute? route = null;
+
+        if (!isExpenseEntry &&
+            !FinancialChatQuestionRouter.TryRoute(questionText, out route))
         {
             errorMessage = PurchaseQuestionParser.LooksLikePurchasePlanQuestion(questionText)
                 ? "Please use a clear PHP target and purchase name, such as: Help me save for ₱11,000 AirPods."
@@ -148,7 +283,13 @@
         try
         {
             var today = DateOnly.FromDateTime(DateTime.Today);
-            if (route.Question == FinancialChatQuestion.PurchasePlan)
+            if (isExpenseEntry)
+            {
+                await AnswerExpenseEntry(userId, today, questionText);
+                return;
+            }
+
+            if (route!.Question == FinancialChatQuestion.PurchasePlan)
             {
                 await AnswerPurchasePlanQuestion(userId, today, questionText, route.Purchase!);
                 return;
@@ -200,6 +341,20 @@
         var analysis = await TransactionAnalysis.GetCurrentMonthAsync(userId, today);
         var deterministicResponse = FinancialChatResponseBuilder.BuildDeterministicResponse(question, analysis);
 
+        if (question == FinancialChatQuestion.TopSpendingCategory &&
+            analysis.HighestSpendingCategoryPercentage is null)
+        {
+            messages.Add(new ChatMessage(false, deterministicResponse));
+            return;
+        }
+
+        if (question == FinancialChatQuestion.UnusuallyLargeExpense &&
+            (!analysis.HasEnoughLargeTransactionHistory || analysis.UnusuallyLargeExpense is null))
+        {
+            messages.Add(new ChatMessage(false, deterministicResponse));
+            return;
+        }
+
         if (analysis.TransactionCount == 0)
         {
             messages.Add(new ChatMessage(false, deterministicResponse));
@@ -209,9 +364,16 @@
         var aiResult = await AiService.ExplainAsync(
             question,
             questionText,
-            analysis.ToAiContext(
-                includeLargestExpenseDescription:
-                    question == FinancialChatQuestion.LargestExpense));
+            question switch
+            {
+                FinancialChatQuestion.TopSpendingCategory =>
+                    analysis.ToTopSpendingCategoryAiContext(),
+                FinancialChatQuestion.UnusuallyLargeExpense =>
+                    analysis.ToLargeTransactionAiContext(),
+                _ => analysis.ToAiContext(
+                    includeLargestExpenseDescription:
+                        question == FinancialChatQuestion.LargestExpense)
+            });
 
         AddAiOrFallback(aiResult, deterministicResponse);
     }
@@ -282,7 +444,8 @@
         FinancialChatQuestion.TotalBudgetRemaining or
         FinancialChatQuestion.OverBudgetCategories or
         FinancialChatQuestion.CategoryBudgetRemaining or
-        FinancialChatQuestion.ClosestBudgetToUsedUp;
+        FinancialChatQuestion.ClosestBudgetToUsedUp or
+        FinancialChatQuestion.BudgetOverspendingProjection;
 
     private async Task AnswerSavingsQuestion(
         string userId,
@@ -391,7 +554,234 @@
         AddAiOrFallback(aiResult, deterministicResponse);
     }
 
+    private async Task AnswerExpenseEntry(
+        string userId,
+        DateOnly today,
+        string originalMessage)
+    {
+        var result = await ExpenseDraftParser.ParseAsync(userId, originalMessage, today);
+        if (!result.IsSuccess)
+        {
+            messages.Add(new ChatMessage(false, result.ErrorMessage!));
+            return;
+        }
+
+        var draft = result.Draft!;
+        await LoadExpenseConfirmationOptions(userId);
+        expenseConfirmation = new ExpenseConfirmationInput
+        {
+            Amount = draft.Amount,
+            AccountId = draft.SuggestedAccountId,
+            CategoryId = draft.SuggestedCategoryId,
+            Date = draft.Date,
+            Merchant = draft.Merchant,
+            Description = draft.Description
+        };
+        expenseDraftMissingFields = draft.MissingFields;
+        expenseDraftWarnings = draft.ParseWarnings;
+        messages.Add(new ChatMessage(
+            false,
+            "I parsed an expense draft. Review or correct every field, then explicitly confirm it if you want to save."));
+    }
+
+    private async Task LoadExpenseConfirmationOptions(string userId)
+    {
+        expenseAccounts = await Db.FinancialAccounts
+            .AsNoTracking()
+            .Where(account => account.UserId == userId && !account.IsArchived)
+            .OrderBy(account => account.Name)
+            .ToListAsync();
+
+        expenseCategories = await Db.Categories
+            .AsNoTracking()
+            .Where(category =>
+                category.Type == CategoryType.Expense &&
+                ((category.IsDefault && category.UserId == null) ||
+                 (!category.IsDefault && category.UserId == userId)))
+            .OrderBy(category => category.Name)
+            .ToListAsync();
+    }
+
+    private async Task ConfirmExpense()
+    {
+        if (expenseConfirmation is null || isSavingExpense)
+        {
+            return;
+        }
+
+        isSavingExpense = true;
+        expenseConfirmationError = null;
+        expenseSaveSuccess = null;
+        Transaction? transaction = null;
+
+        try
+        {
+            var userId = await GetCurrentUserId();
+            if (userId is null)
+            {
+                expenseConfirmationError = "Please log in again before confirming this transaction.";
+                return;
+            }
+
+            var validationError = ValidateExpenseConfirmation(expenseConfirmation);
+            if (validationError is not null)
+            {
+                expenseConfirmationError = validationError;
+                return;
+            }
+
+            var accountExists = await Db.FinancialAccounts.AnyAsync(account =>
+                account.Id == expenseConfirmation.AccountId &&
+                account.UserId == userId &&
+                !account.IsArchived);
+            if (!accountExists)
+            {
+                expenseConfirmationError = "Select one of your active financial accounts.";
+                return;
+            }
+
+            var categoryExists = await Db.Categories.AnyAsync(category =>
+                category.Id == expenseConfirmation.CategoryId &&
+                category.Type == CategoryType.Expense &&
+                ((category.IsDefault && category.UserId == null) ||
+                 (!category.IsDefault && category.UserId == userId)));
+            if (!categoryExists)
+            {
+                expenseConfirmationError = "Select a valid expense category.";
+                return;
+            }
+
+            transaction = new Transaction
+            {
+                UserId = userId,
+                AccountId = expenseConfirmation.AccountId!.Value,
+                CategoryId = expenseConfirmation.CategoryId!.Value,
+                Type = TransactionType.Expense,
+                Amount = expenseConfirmation.Amount!.Value,
+                Date = expenseConfirmation.Date!.Value,
+                Merchant = expenseConfirmation.Merchant.Trim(),
+                Description = string.IsNullOrWhiteSpace(expenseConfirmation.Description)
+                    ? null
+                    : expenseConfirmation.Description.Trim()
+            };
+
+            Db.Transactions.Add(transaction);
+            await Db.SaveChangesAsync();
+
+            DiscardExpenseDraft();
+            expenseSaveSuccess = "Expense saved successfully. It now appears in transaction history and calculated balances.";
+            messages.Add(new ChatMessage(false, "Transaction confirmed and saved."));
+        }
+        catch (Exception exception)
+        {
+            if (transaction is not null)
+            {
+                Db.Entry(transaction).State = EntityState.Detached;
+            }
+
+            Logger.LogError(exception, "Unable to save the confirmed parsed expense.");
+            expenseConfirmationError = "Kwenta couldn't save the transaction. Please review it and try again.";
+        }
+        finally
+        {
+            isSavingExpense = false;
+        }
+    }
+
+    private async Task<string?> GetCurrentUserId()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+    }
+
+    private static string? ValidateExpenseConfirmation(ExpenseConfirmationInput confirmation)
+    {
+        if (confirmation.Amount is null || confirmation.Amount <= 0)
+        {
+            return "Amount must be greater than zero.";
+        }
+
+        if (decimal.Round(confirmation.Amount.Value, 2) != confirmation.Amount.Value)
+        {
+            return "Amount can have at most two decimal places.";
+        }
+
+        if (confirmation.AccountId is null)
+        {
+            return "Financial account is required.";
+        }
+
+        if (confirmation.CategoryId is null)
+        {
+            return "Expense category is required.";
+        }
+
+        if (confirmation.Date is null)
+        {
+            return "Date is required.";
+        }
+
+        if (string.IsNullOrWhiteSpace(confirmation.Merchant))
+        {
+            return "Merchant/payee is required.";
+        }
+
+        return null;
+    }
+
+    private void DiscardExpenseDraft()
+    {
+        expenseConfirmation = null;
+        expenseAccounts = [];
+        expenseCategories = [];
+        expenseDraftMissingFields = [];
+        expenseDraftWarnings = [];
+        expenseConfirmationError = null;
+    }
+
+    private static string FormatPeso(decimal amount) =>
+        $"₱{amount.ToString("N2", PhilippineCulture)}";
+
     private sealed record ChatMessage(bool IsUser, string Text);
+
+    private sealed class ExpenseConfirmationInput : IValidatableObject
+    {
+        [Required(ErrorMessage = "Amount is required.")]
+        [Range(typeof(decimal), "0.01", "999999999999.99",
+            ErrorMessage = "Amount must be greater than zero.")]
+        public decimal? Amount { get; set; }
+
+        [Required(ErrorMessage = "Financial account is required.")]
+        public int? AccountId { get; set; }
+
+        [Required(ErrorMessage = "Expense category is required.")]
+        public int? CategoryId { get; set; }
+
+        [Required(ErrorMessage = "Date is required.")]
+        public DateOnly? Date { get; set; }
+
+        [Required(ErrorMessage = "Merchant/payee is required.")]
+        public string Merchant { get; set; } = string.Empty;
+
+        public string? Description { get; set; }
+
+        public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+        {
+            if (!string.IsNullOrEmpty(Merchant) && string.IsNullOrWhiteSpace(Merchant))
+            {
+                yield return new ValidationResult(
+                    "Merchant/payee is required.",
+                    [nameof(Merchant)]);
+            }
+
+            if (Amount is decimal amount && decimal.Round(amount, 2) != amount)
+            {
+                yield return new ValidationResult(
+                    "Amount can have at most two decimal places.",
+                    [nameof(Amount)]);
+            }
+        }
+    }
 
     private sealed class ChatInput
     {

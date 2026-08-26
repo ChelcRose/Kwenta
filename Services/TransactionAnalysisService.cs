@@ -47,6 +47,10 @@ public sealed class TransactionAnalysisService(ApplicationDbContext db)
             .Where(transaction => transaction.Type == TransactionType.Income)
             .Sum(transaction => transaction.Amount);
 
+        var expenses = transactions
+            .Where(transaction => transaction.Type == TransactionType.Expense)
+            .ToList();
+
         var expenseCategories = transactions
             .Where(transaction => transaction.Type == TransactionType.Expense)
             .GroupBy(transaction => new { transaction.CategoryId, transaction.CategoryName })
@@ -55,23 +59,40 @@ public sealed class TransactionAnalysisService(ApplicationDbContext db)
                 group.Key.CategoryName,
                 group.Sum(transaction => transaction.Amount)))
             .OrderByDescending(category => category.Amount)
-            .ThenBy(category => category.CategoryName)
+            .ThenBy(category => category.CategoryName, StringComparer.Ordinal)
+            .ThenBy(category => category.CategoryId)
             .ToList();
 
-        var largestExpense = transactions
-            .Where(transaction => transaction.Type == TransactionType.Expense)
+        var largestExpense = expenses
             .OrderByDescending(transaction => transaction.Amount)
             .ThenByDescending(transaction => transaction.Date)
             .ThenByDescending(transaction => transaction.Id)
             .FirstOrDefault();
 
+        var averageExpense = expenses.Count >= 3
+            ? expenses.Average(transaction => transaction.Amount)
+            : (decimal?)null;
+        var largeTransactionThreshold = averageExpense * 2;
+        var unusuallyLargeExpense = largeTransactionThreshold is { } threshold
+            ? expenses
+                .Where(transaction => transaction.Amount >= threshold)
+                .OrderByDescending(transaction => transaction.Amount)
+                .ThenByDescending(transaction => transaction.Date)
+                .ThenByDescending(transaction => transaction.Id)
+                .FirstOrDefault()
+            : null;
+
         return new MonthlyTransactionAnalysis(
             monthStart,
             transactions.Count,
+            expenses.Count,
             totalExpenses,
             totalIncome,
             expenseCategories,
-            largestExpense);
+            largestExpense,
+            averageExpense,
+            largeTransactionThreshold,
+            unusuallyLargeExpense);
     }
 
     public sealed record MonthlyTransactionFact(
@@ -90,14 +111,72 @@ public sealed class TransactionAnalysisService(ApplicationDbContext db)
     public sealed record MonthlyTransactionAnalysis(
         DateOnly MonthStart,
         int TransactionCount,
+        int ExpenseCount,
         decimal TotalExpenses,
         decimal TotalIncome,
         IReadOnlyList<CategoryExpenseTotal> ExpenseCategories,
-        MonthlyTransactionFact? LargestExpense)
+        MonthlyTransactionFact? LargestExpense,
+        decimal? AverageExpense,
+        decimal? LargeTransactionThreshold,
+        MonthlyTransactionFact? UnusuallyLargeExpense)
     {
         public string MonthName => MonthStart.ToString("MMMM yyyy", PhilippineCulture);
 
         public CategoryExpenseTotal? HighestSpendingCategory => ExpenseCategories.FirstOrDefault();
+
+        public decimal? HighestSpendingCategoryPercentage =>
+            HighestSpendingCategory is { } category && TotalExpenses > 0
+                ? category.Amount / TotalExpenses * 100
+                : null;
+
+        public bool HasEnoughLargeTransactionHistory => ExpenseCount >= 3;
+
+        public string ToLargeTransactionAiContext()
+        {
+            var expense = UnusuallyLargeExpense;
+            if (AverageExpense is null || LargeTransactionThreshold is null || expense is null)
+            {
+                throw new InvalidOperationException(
+                    "Large-transaction AI context requires a qualifying deterministic result.");
+            }
+
+            var context = new StringBuilder()
+                .AppendLine($"Current month: {MonthName}")
+                .AppendLine($"Expense count: {ExpenseCount}")
+                .AppendLine($"Average expense: {FormatPeso(AverageExpense.Value)}")
+                .AppendLine($"Large-transaction threshold: {FormatPeso(LargeTransactionThreshold.Value)}")
+                .AppendLine("Unusually large expense:")
+                .AppendLine($"Amount: {FormatPeso(expense.Amount)}")
+                .AppendLine($"Merchant: {expense.Merchant}")
+                .AppendLine($"Category: {expense.CategoryName}")
+                .AppendLine($"Account: {expense.AccountName}")
+                .AppendLine($"Date: {expense.Date:yyyy-MM-dd}");
+
+            if (!string.IsNullOrWhiteSpace(expense.Description))
+            {
+                context.AppendLine($"Description: {expense.Description}");
+            }
+
+            return context.ToString().TrimEnd();
+        }
+
+        public string ToTopSpendingCategoryAiContext()
+        {
+            var topCategory = HighestSpendingCategory;
+            if (topCategory is null || HighestSpendingCategoryPercentage is null)
+            {
+                return $"Current month: {MonthName}\nTotal spending: ₱0.00\nTop spending category: None";
+            }
+
+            return new StringBuilder()
+                .AppendLine($"Current month: {MonthName}")
+                .AppendLine($"Total spending: {FormatPeso(TotalExpenses)}")
+                .AppendLine($"Top spending category: {topCategory.CategoryName}")
+                .AppendLine($"Top category spending: {FormatPeso(topCategory.Amount)}")
+                .AppendLine($"Share of total spending: {FormatPercentage(HighestSpendingCategoryPercentage.Value)}")
+                .ToString()
+                .TrimEnd();
+        }
 
         public string ToAiContext(bool includeLargestExpenseDescription)
         {
@@ -140,5 +219,8 @@ public sealed class TransactionAnalysisService(ApplicationDbContext db)
 
         private static string FormatPeso(decimal amount) =>
             $"₱{amount.ToString("N2", PhilippineCulture)}";
+
+        private static string FormatPercentage(decimal percentage) =>
+            $"{percentage.ToString("0.#", PhilippineCulture)}%";
     }
 }

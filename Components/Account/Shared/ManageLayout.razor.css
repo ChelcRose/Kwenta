@@ -1,0 +1,174 @@
+.manage-page {
+    width: min(100%, 1080px);
+    margin: 0 auto;
+    padding: clamp(1.25rem, 3vw, 2.25rem);
+}
+
+.manage-header {
+    margin-bottom: 1.35rem;
+}
+
+.manage-eyebrow {
+    display: block;
+    margin-bottom: 0.3rem;
+    color: #177557;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.manage-header h1 {
+    margin: 0;
+    color: #1b2924;
+    font-size: clamp(1.75rem, 4vw, 2.25rem);
+    font-weight: 780;
+    letter-spacing: -0.04em;
+}
+
+.manage-header p {
+    margin: 0.45rem 0 0;
+    color: #68766f;
+    font-size: 0.94rem;
+}
+
+.manage-layout {
+    display: grid;
+    grid-template-columns: minmax(190px, 230px) minmax(0, 1fr);
+    align-items: start;
+    gap: 1rem;
+}
+
+.manage-sidebar,
+.manage-content {
+    border: 1px solid #dfe7e2;
+    border-radius: 0.95rem;
+    background: #fff;
+    box-shadow: 0 10px 32px rgba(27, 52, 43, 0.06);
+}
+
+.manage-sidebar {
+    padding: 0.65rem;
+}
+
+.manage-content {
+    min-width: 0;
+    padding: clamp(1.1rem, 3vw, 1.6rem);
+}
+
+.manage-content ::deep h3 {
+    margin: 0 0 0.35rem;
+    color: #1b2924;
+    font-size: 1.3rem;
+    font-weight: 760;
+    letter-spacing: -0.025em;
+}
+
+.manage-content ::deep h4 {
+    margin: 1.25rem 0 0.55rem;
+    color: #315249;
+    font-size: 1rem;
+    font-weight: 740;
+}
+
+.manage-content ::deep > .row,
+.manage-content ::deep > form,
+.manage-content ::deep > .alert,
+.manage-content ::deep > p,
+.manage-content ::deep > table {
+    margin-top: 1rem;
+}
+
+.manage-content ::deep .row {
+    --bs-gutter-x: 0;
+    margin-right: 0;
+    margin-left: 0;
+}
+
+.manage-content ::deep [class*="col-"] {
+    width: min(100%, 580px);
+    padding: 0;
+}
+
+.manage-content ::deep .form-floating {
+    margin-bottom: 0.85rem !important;
+}
+
+.manage-content ::deep .form-control {
+    min-height: 3.25rem;
+    border-color: #ccd8d1;
+    border-radius: 0.7rem;
+    background-color: #fbfdfc;
+    color: #1b2924;
+}
+
+.manage-content ::deep .form-control:focus {
+    border-color: #177557;
+    background-color: #fff;
+    box-shadow: 0 0 0 3px rgba(23, 117, 87, 0.13);
+}
+
+.manage-content ::deep .form-control:disabled {
+    background: #f1f5f3;
+    color: #68766f;
+}
+
+.manage-content ::deep .btn {
+    min-height: 2.7rem;
+    border-radius: 0.65rem;
+    padding: 0.6rem 0.9rem;
+    font-size: 0.88rem;
+    font-weight: 720;
+}
+
+.manage-content ::deep .btn-primary {
+    border-color: #177557;
+    background: #177557;
+}
+
+.manage-content ::deep .btn-primary:hover {
+    border-color: #105c44;
+    background: #105c44;
+}
+
+.manage-content ::deep .btn-danger {
+    border-color: #b43a47;
+    background: #b43a47;
+}
+
+.manage-content ::deep .btn-link {
+    min-height: auto;
+    color: #177557;
+    padding-inline: 0;
+}
+
+.manage-content ::deep .alert {
+    border-radius: 0.7rem;
+    font-size: 0.86rem;
+}
+
+.manage-content ::deep .text-danger,
+.manage-content ::deep .validation-message {
+    color: #b4232f !important;
+    font-size: 0.8rem;
+}
+
+.manage-content ::deep table {
+    width: 100%;
+    border-color: #e1e8e4;
+    font-size: 0.86rem;
+}
+
+@media (max-width: 760px) {
+    .manage-page {
+        padding: 1rem;
+    }
+
+    .manage-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .manage-sidebar {
+        overflow-x: auto;
+    }
+}

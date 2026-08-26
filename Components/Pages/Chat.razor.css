@@ -1,152 +1,5 @@
 .chat-page {
-    max-width: 1180px;
-}
-
-.chat-workspace {
-    display: grid;
-    grid-template-columns: minmax(210px, 260px) minmax(0, 1fr);
-    align-items: start;
-    gap: 1rem;
-}
-
-.chat-sidebar {
-    position: sticky;
-    top: 1rem;
-    padding: 0.85rem;
-}
-
-.new-chat-button {
-    display: inline-flex;
-    width: 100%;
-    min-height: 2.7rem;
-    align-items: center;
-    justify-content: center;
-    gap: 0.45rem;
-    border: 0;
-    border-radius: 0.7rem;
-    background: #177557;
-    color: #fff;
-    padding: 0.65rem 0.8rem;
-    font-size: 0.88rem;
-    font-weight: 750;
-}
-
-.new-chat-button span {
-    font-size: 1.2rem;
-    line-height: 0.8;
-}
-
-.new-chat-button:hover:not(:disabled) {
-    background: #105c44;
-}
-
-.chat-sidebar h2 {
-    margin: 1rem 0 0.55rem;
-    color: #64756d;
-    font-size: 0.74rem;
-    font-weight: 750;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-}
-
-.chat-list {
-    display: grid;
-    gap: 0.4rem;
-}
-
-.chat-list-empty {
-    margin: 0;
-    color: #718078;
-    font-size: 0.82rem;
-    line-height: 1.45;
-}
-
-.chat-list-item {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    border: 1px solid transparent;
-    border-radius: 0.7rem;
-    background: #f7faf8;
-    overflow: hidden;
-}
-
-.chat-list-item-active {
-    border-color: #9fc4b4;
-    background: #edf6f1;
-}
-
-.chat-list-open,
-.chat-list-delete {
-    border: 0;
-    background: transparent;
-    color: #315249;
-}
-
-.chat-list-open {
-    min-width: 0;
-    padding: 0.65rem 0.35rem 0.65rem 0.7rem;
-    text-align: left;
-}
-
-.chat-list-open span,
-.chat-list-open time {
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.chat-list-open span {
-    font-size: 0.83rem;
-    font-weight: 700;
-}
-
-.chat-list-open time {
-    margin-top: 0.2rem;
-    color: #718078;
-    font-size: 0.68rem;
-}
-
-.chat-list-delete {
-    align-self: stretch;
-    padding: 0.35rem 0.65rem;
-    color: #7b8982;
-    font-size: 1.15rem;
-}
-
-.chat-list-delete:hover:not(:disabled) {
-    background: #f9e9eb;
-    color: #9d2b36;
-}
-
-.chat-delete-confirmation {
-    grid-column: 1 / -1;
-    border-top: 1px solid #d8e4de;
-    background: #fff;
-    padding: 0.6rem 0.7rem;
-    color: #5c6b64;
-    font-size: 0.75rem;
-}
-
-.chat-delete-confirmation div {
-    display: flex;
-    gap: 0.4rem;
-    margin-top: 0.45rem;
-}
-
-.chat-delete-confirmation button {
-    border: 1px solid #ccd8d1;
-    border-radius: 0.45rem;
-    background: #fff;
-    color: #405149;
-    padding: 0.3rem 0.5rem;
-    font-size: 0.72rem;
-    font-weight: 700;
-}
-
-.chat-delete-confirmation button:first-child {
-    border-color: #dcaeb3;
-    color: #9d2b36;
+    max-width: 920px;
 }
 
 .chat-card {
@@ -499,18 +352,6 @@
 }
 
 @media (max-width: 640px) {
-    .chat-workspace {
-        grid-template-columns: 1fr;
-    }
-
-    .chat-sidebar {
-        position: static;
-    }
-
-    .chat-list {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
     .chat-message {
         max-width: 92%;
     }
@@ -549,11 +390,5 @@
     .expense-confirmation-actions .app-button {
         justify-content: center;
         width: 100%;
-    }
-}
-
-@media (max-width: 430px) {
-    .chat-list {
-        grid-template-columns: 1fr;
     }
 }

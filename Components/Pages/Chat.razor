@@ -32,56 +32,7 @@
         </div>
     </header>
 
-    <div class="chat-workspace">
-        <aside class="surface-card chat-sidebar" aria-label="Chat conversations">
-            <button type="button" class="new-chat-button" @onclick="StartNewChat" disabled="@isLoading">
-                <span aria-hidden="true">+</span>
-                New Chat
-            </button>
-
-            <h2>Recent conversations</h2>
-            @if (conversations.Count == 0)
-            {
-                <p class="chat-list-empty">No chats yet. Start a new conversation with Kwenta.</p>
-            }
-            else
-            {
-                <div class="chat-list">
-                    @foreach (var conversation in conversations)
-                    {
-                        <div class="chat-list-item @(currentConversationId == conversation.Id ? "chat-list-item-active" : null)" @key="conversation.Id">
-                            <button type="button"
-                                    class="chat-list-open"
-                                    @onclick="() => OpenConversation(conversation.Id)"
-                                    disabled="@isLoading"
-                                    aria-current="@(currentConversationId == conversation.Id ? "true" : null)">
-                                <span>@conversation.Title</span>
-                                <time datetime="@conversation.UpdatedAt.ToString("O")">@conversation.UpdatedAt.ToLocalTime().ToString("MMM d, h:mm tt")</time>
-                            </button>
-                            <button type="button"
-                                    class="chat-list-delete"
-                                    title="Delete conversation"
-                                    aria-label="Delete @conversation.Title"
-                                    @onclick="() => pendingDeleteConversationId = conversation.Id"
-                                    disabled="@isLoading">×</button>
-
-                            @if (pendingDeleteConversationId == conversation.Id)
-                            {
-                                <div class="chat-delete-confirmation" role="alert">
-                                    <span>Delete this chat?</span>
-                                    <div>
-                                        <button type="button" @onclick="() => DeleteConversation(conversation.Id)">Delete</button>
-                                        <button type="button" @onclick="() => pendingDeleteConversationId = null">Cancel</button>
-                                    </div>
-                                </div>
-                            }
-                        </div>
-                    }
-                </div>
-            }
-        </aside>
-
-        <section class="surface-card chat-card" aria-label="Financial chat">
+    <section class="surface-card chat-card" aria-label="Financial chat">
         <div class="chat-conversation" aria-live="polite" aria-busy="@isLoading">
             @if (messages.Count == 0)
             {
@@ -389,8 +340,7 @@
                 </div>
             }
         </div>
-        </section>
-    </div>
+    </section>
 </div>
 
 @code {
@@ -414,7 +364,8 @@
         new("question-group-planning", "Plan and decide",
         [
             "Am I likely to go over budget this month?",
-            "How much do I have left for my allowance?",
+            "How much do I have left?",
+            "Show my allowance allocations.",
             "How have my savings changed from last month?",
             "Can I buy ₱180 milk tea?",
             "Help me save for ₱11,000 AirPods."
@@ -432,7 +383,9 @@
     private readonly List<ChatMessage> messages = [];
     private List<ConversationListItem> conversations = [];
     private int? currentConversationId;
-    private int? pendingDeleteConversationId;
+
+    [SupplyParameterFromQuery(Name = "conversation")]
+    private int? RequestedConversationId { get; set; }
     private ChatInput input = new();
     private ExpenseConfirmationInput? expenseConfirmation;
     private List<FinancialAccount> expenseAccounts = [];
@@ -467,7 +420,11 @@
         try
         {
             await LoadConversationList(userId);
-            if (conversations.Count > 0)
+            if (RequestedConversationId is int requestedConversationId)
+            {
+                await OpenConversation(requestedConversationId);
+            }
+            else if (conversations.Count > 0)
             {
                 await OpenConversation(conversations[0].Id);
             }
@@ -543,17 +500,10 @@
         }
     }
 
-    private void StartNewChat()
-    {
-        ResetConversationUi();
-        currentConversationId = null;
-    }
-
     private void ResetConversationUi()
     {
         messages.Clear();
         input = new();
-        pendingDeleteConversationId = null;
         errorMessage = null;
         expenseSaveSuccess = null;
         showAllQuestions = false;
@@ -561,44 +511,6 @@
         DiscardExpenseDraft();
         DiscardAllowanceDraft();
         DiscardTransferDraft();
-    }
-
-    private async Task DeleteConversation(int conversationId)
-    {
-        var userId = await GetCurrentUserId();
-        if (userId is null)
-        {
-            errorMessage = "Please log in again to delete this conversation.";
-            return;
-        }
-
-        try
-        {
-            var conversation = await Db.ChatConversations.SingleOrDefaultAsync(item =>
-                item.Id == conversationId && item.UserId == userId);
-            if (conversation is null)
-            {
-                errorMessage = "That conversation could not be found.";
-                return;
-            }
-
-            Db.ChatConversations.Remove(conversation);
-            await Db.SaveChangesAsync();
-
-            if (currentConversationId == conversationId)
-            {
-                StartNewChat();
-            }
-
-            pendingDeleteConversationId = null;
-            await LoadConversationList(userId);
-        }
-        catch (Exception exception)
-        {
-            Logger.LogError(exception, "Unable to delete chat conversation {ConversationId} for the current user.", conversationId);
-            ResetFailedChatPersistenceEntries();
-            errorMessage = "Kwenta couldn't delete that conversation. Please try again.";
-        }
     }
 
     private async Task<bool> PersistUserMessage(string userId, string content)
@@ -836,6 +748,12 @@
                 return;
             }
 
+            if (route.Question == FinancialChatQuestion.AllowanceAllocations)
+            {
+                await AnswerAllowanceAllocationsQuestion(userId);
+                return;
+            }
+
             if (IsBudgetQuestion(route.Question))
             {
                 await AnswerBudgetQuestion(userId, today, questionText, route);
@@ -927,6 +845,41 @@
             false,
             $"You have {FormatPeso(progress.Remaining)} left from this week's allowance. " +
             $"You received {FormatPeso(progress.Allowance.AmountReceived)} and have spent {FormatPeso(progress.AmountSpent)} against it."));
+    }
+
+    private async Task AnswerAllowanceAllocationsQuestion(string userId)
+    {
+        var progress = await AllowanceService.GetActiveProgressAsync(userId);
+        if (progress is null)
+        {
+            messages.Add(new ChatMessage(false, "You don't have an active weekly allowance right now."));
+            return;
+        }
+
+        var ownedAllocations = progress.Allowance.Allocations
+            .Where(allocation => allocation.FinancialAccount.UserId == userId)
+            .OrderBy(allocation => allocation.FinancialAccount.Name)
+            .ThenBy(allocation => allocation.Id)
+            .ToList();
+        if (ownedAllocations.Count == 0)
+        {
+            messages.Add(new ChatMessage(false, "No account allocations were found for your active weekly allowance."));
+            return;
+        }
+
+        var allocationLines = ownedAllocations.Select(allocation =>
+        {
+            var account = allocation.FinancialAccount;
+            var provider = string.IsNullOrWhiteSpace(account.Provider)
+                ? string.Empty
+                : $" ({account.Provider})";
+            return $"• {account.Name}{provider}: {FormatPeso(allocation.Amount)}";
+        });
+
+        messages.Add(new ChatMessage(
+            false,
+            $"Your {FormatPeso(progress.Allowance.AmountReceived)} weekly allowance is allocated across these accounts:\n" +
+            string.Join("\n", allocationLines)));
     }
 
     private async Task AnswerBudgetQuestion(

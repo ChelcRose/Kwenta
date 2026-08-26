@@ -15,7 +15,7 @@
 
 <PageTitle>Weekly Allowance</PageTitle>
 
-<div class="app-page">
+<div class="app-page allowance-page">
     <header class="page-header">
         <div>
             <h1>Weekly Allowance</h1>
@@ -30,7 +30,7 @@
 
     @if (activeProgress is null && closedProgress is not null && closedProgress.Remaining > 0)
     {
-        <EditForm Model="leftoverTransfer" OnValidSubmit="MoveLeftover" FormName="MoveAllowanceLeftover" class="surface-card form-card">
+        <EditForm Model="leftoverTransfer" OnValidSubmit="MoveLeftover" FormName="MoveAllowanceLeftover" class="surface-card form-card allowance-form">
             <DataAnnotationsValidator /><ValidationSummary />
             <h2 class="section-heading">Move leftover to savings</h2>
             <p>@FormatPeso(closedProgress.Remaining) remains from the closed allowance. Choose where the physical money currently is and where to move it.</p>
@@ -51,7 +51,7 @@
 
     @if (activeProgress is null)
     {
-        <EditForm Model="input" OnValidSubmit="StartAllowance" FormName="StartWeeklyAllowance" class="surface-card form-card">
+        <EditForm Model="input" OnValidSubmit="StartAllowance" FormName="StartWeeklyAllowance" class="surface-card form-card allowance-form">
             <DataAnnotationsValidator />
             <ValidationSummary />
             <h2 class="section-heading">Start weekly allowance</h2>
@@ -69,41 +69,49 @@
                 </div>
             </div>
 
-            <div class="section-bar"><h2>Distribute across accounts</h2></div>
-            @foreach (var allocation in input.Allocations)
-            {
-                <div class="form-grid" @key="allocation.Key">
-                    <div class="form-field">
-                        <label>Account</label>
-                        <InputSelect @bind-Value="allocation.AccountId">
-                            <option value="">Select an account</option>
-                            @foreach (var account in accounts)
-                            {
-                                <option value="@account.Id">@account.Name</option>
-                            }
-                        </InputSelect>
+            <div class="allowance-allocation-section">
+                <div class="allowance-section-heading">
+                    <div>
+                        <h2>Distribute across accounts</h2>
+                        <p>Allocate the full allowance amount to one or more active accounts.</p>
                     </div>
-                    <div class="form-field">
-                        <label>Allocation amount</label>
-                        <InputNumber @bind-Value="allocation.Amount" step="0.01" />
-                    </div>
-                    @if (input.Allocations.Count > 1)
+                    <button type="button" class="app-button app-button-secondary" @onclick="AddAllocation">Add account</button>
+                </div>
+
+                <div class="allowance-allocation-list">
+                    @foreach (var allocation in input.Allocations)
                     {
-                        <div class="form-actions">
-                            <button type="button" class="app-button app-button-secondary" @onclick="() => RemoveAllocation(allocation)">Remove</button>
+                        <div class="allowance-allocation-row" @key="allocation.Key">
+                            <div class="form-grid">
+                                <div class="form-field">
+                                    <label>Account</label>
+                                    <InputSelect @bind-Value="allocation.AccountId">
+                                        <option value="">Select an account</option>
+                                        @foreach (var account in accounts)
+                                        {
+                                            <option value="@account.Id">@account.Name</option>
+                                        }
+                                    </InputSelect>
+                                </div>
+                                <div class="form-field">
+                                    <label>Allocation amount</label>
+                                    <InputNumber @bind-Value="allocation.Amount" step="0.01" />
+                                </div>
+                            </div>
+                            @if (input.Allocations.Count > 1)
+                            {
+                                <button type="button" class="allowance-remove-button" @onclick="() => RemoveAllocation(allocation)">Remove</button>
+                            }
                         </div>
                     }
                 </div>
-            }
-
-            <div class="form-actions">
-                <button type="button" class="app-button app-button-secondary" @onclick="AddAllocation">Add account</button>
             </div>
-            <div class="expense-draft-notice">
+
+            <div class="allowance-summary" aria-live="polite">
                 <p><strong>Total allocated:</strong> @FormatPeso(TotalAllocated)</p>
                 <p><strong>Remaining to allocate:</strong> @FormatPeso((input.AmountReceived ?? 0) - TotalAllocated)</p>
             </div>
-            <div class="form-actions">
+            <div class="form-actions allowance-primary-action">
                 <button type="submit" class="app-button app-button-primary" disabled="@(isSaving || accounts.Count == 0)">
                     @(isSaving ? "Starting…" : "Start Weekly Allowance")
                 </button>
@@ -121,9 +129,11 @@
                 </div>
                 <span class="badge-soft badge-success">Active</span>
             </div>
-            <p><strong>Received:</strong> @FormatPeso(activeProgress.Allowance.AmountReceived)</p>
-            <p><strong>Spent:</strong> @FormatPeso(activeProgress.AmountSpent)</p>
-            <p><strong>Remaining:</strong> <span class="@(activeProgress.Remaining < 0 ? "money-negative" : "money-value")">@FormatPeso(activeProgress.Remaining)</span></p>
+            <div class="allowance-stats">
+                <div><span>Received</span><strong>@FormatPeso(activeProgress.Allowance.AmountReceived)</strong></div>
+                <div><span>Spent</span><strong>@FormatPeso(activeProgress.AmountSpent)</strong></div>
+                <div><span>Remaining</span><strong class="@(activeProgress.Remaining < 0 ? "money-negative" : "money-value")">@FormatPeso(activeProgress.Remaining)</strong></div>
+            </div>
         </section>
 
         <section class="content-section">
@@ -169,7 +179,7 @@
             }
         </section>
 
-        <section class="surface-card form-card">
+        <section class="surface-card form-card allowance-end-card">
             <h2 class="section-heading">End week</h2>
             <p>Closing preserves the allowance, allocations, Income, and linked expenses. Leftover money is not transferred automatically.</p>
             @if (!showCloseConfirmation)

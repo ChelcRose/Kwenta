@@ -21,6 +21,7 @@ public enum FinancialChatQuestion
     PreviousMonthSpending,
     SpendingComparison,
     AllowanceRemaining,
+    AllowanceAllocations,
     PurchaseAffordability,
     PurchasePlan
 }
@@ -50,6 +51,12 @@ public static class FinancialChatQuestionRouter
         }
 
         var normalized = NormalizeQuestion(question);
+
+        if (IsAllowanceAllocationQuestion(normalized))
+        {
+            route = new(FinancialChatQuestion.AllowanceAllocations);
+            return true;
+        }
 
         if (IsAllowanceRemainingQuestion(normalized))
         {
@@ -109,11 +116,32 @@ public static class FinancialChatQuestionRouter
         return false;
     }
 
-    private static bool IsAllowanceRemainingQuestion(string normalized) =>
+    private static bool IsAllowanceRemainingQuestion(string normalized)
+    {
+        if (normalized is
+            "how much do i have left" or
+            "how much money do i have left" or
+            "how much have i got left" or
+            "how much is left" or
+            "what do i have left" or
+            "what is left" or
+            "what's left")
+        {
+            return true;
+        }
+
+        return Regex.IsMatch(normalized, @"\ballowance\b", RegexOptions.CultureInvariant) &&
+               Regex.IsMatch(
+                   normalized,
+                   @"\b(?:left|remaining|remain|balance|available|overview|status|progress|spent|spend|doing)\b",
+                   RegexOptions.CultureInvariant);
+    }
+
+    private static bool IsAllowanceAllocationQuestion(string normalized) =>
         Regex.IsMatch(normalized, @"\ballowance\b", RegexOptions.CultureInvariant) &&
         Regex.IsMatch(
             normalized,
-            @"\b(?:left|remaining|remain|balance|available)\b",
+            @"\b(?:allocate|allocated|allocation|allocations|distribute|distributed|distribution|split|accounts?|where|breakdown)\b",
             RegexOptions.CultureInvariant);
 
     private static string NormalizeQuestion(string question)

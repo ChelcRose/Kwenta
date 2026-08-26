@@ -1,17 +1,19 @@
 ﻿@inherits LayoutComponentBase
 @layout Kwenta.Components.Layout.MainLayout
 
-<h1>Manage your account</h1>
+<div class="manage-page">
+    <header class="manage-header">
+        <span class="manage-eyebrow">Your account</span>
+        <h1>Account settings</h1>
+        <p>Manage your profile, sign-in details, and account security.</p>
+    </header>
 
-<div>
-    <h2>Change your account settings</h2>
-    <hr />
-    <div class="row">
-        <div class="col-lg-3">
+    <div class="manage-layout">
+        <aside class="manage-sidebar" aria-label="Account settings navigation">
             <ManageNavMenu />
-        </div>
-        <div class="col-lg-9">
+        </aside>
+        <main class="manage-content">
             @Body
-        </div>
+        </main>
     </div>
 </div>

@@ -1,0 +1,138 @@
+@page "/Account/Manage/ChatHistory"
+@rendermode InteractiveServer
+
+@using System.Security.Claims
+@using Kwenta.Data
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+
+@inject ApplicationDbContext Db
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ILogger<ChatHistory> Logger
+
+<PageTitle>Chat history</PageTitle>
+
+<h3>Chat history</h3>
+<p class="chat-history-intro">Review conversations you previously had with Kwenta.</p>
+
+@if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div class="alert alert-danger" role="alert">@errorMessage</div>
+}
+
+@if (conversations.Count == 0)
+{
+    <div class="chat-history-empty">
+        <strong>No chat history yet</strong>
+        <p>Your conversations will appear here after you ask Kwenta a question.</p>
+        <a href="/chat" class="btn btn-primary">Ask Kwenta</a>
+    </div>
+}
+else
+{
+    <div class="chat-history-list">
+        @foreach (var conversation in conversations)
+        {
+            <article class="chat-history-item" @key="conversation.Id">
+                <div>
+                    <h4>@conversation.Title</h4>
+                    <time datetime="@conversation.UpdatedAt.ToString("O")">
+                        Updated @conversation.UpdatedAt.ToLocalTime().ToString("MMM d, yyyy · h:mm tt")
+                    </time>
+                </div>
+
+                @if (pendingDeleteId == conversation.Id)
+                {
+                    <div class="chat-history-confirmation" role="alert">
+                        <span>Delete this conversation and its messages?</span>
+                        <button type="button" class="btn btn-danger" @onclick="() => DeleteConversation(conversation.Id)">Delete</button>
+                        <button type="button" class="btn btn-secondary" @onclick="() => pendingDeleteId = null">Cancel</button>
+                    </div>
+                }
+                else
+                {
+                    <div class="chat-history-actions">
+                        <a href="@($"/chat?conversation={conversation.Id}")" class="btn btn-primary">Open</a>
+                        <button type="button" class="btn btn-secondary" @onclick="() => pendingDeleteId = conversation.Id">Delete</button>
+                    </div>
+                }
+            </article>
+        }
+    </div>
+}
+
+@code {
+    private List<ConversationListItem> conversations = [];
+    private int? pendingDeleteId;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync() => await LoadConversations();
+
+    private async Task LoadConversations()
+    {
+        var userId = await GetCurrentUserId();
+        if (userId is null)
+        {
+            errorMessage = "Please log in again to view chat history.";
+            return;
+        }
+
+        try
+        {
+            conversations = await Db.ChatConversations.AsNoTracking()
+                .Where(conversation => conversation.UserId == userId)
+                .OrderByDescending(conversation => conversation.UpdatedAt)
+                .ThenByDescending(conversation => conversation.Id)
+                .Select(conversation => new ConversationListItem(
+                    conversation.Id,
+                    conversation.Title,
+                    conversation.UpdatedAt))
+                .ToListAsync();
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to load the current user's chat history.");
+            errorMessage = "Kwenta couldn't load your chat history. Please try again.";
+        }
+    }
+
+    private async Task DeleteConversation(int conversationId)
+    {
+        var userId = await GetCurrentUserId();
+        if (userId is null)
+        {
+            errorMessage = "Please log in again to delete this conversation.";
+            return;
+        }
+
+        try
+        {
+            var conversation = await Db.ChatConversations.SingleOrDefaultAsync(item =>
+                item.Id == conversationId && item.UserId == userId);
+            if (conversation is null)
+            {
+                errorMessage = "That conversation could not be found.";
+                return;
+            }
+
+            Db.ChatConversations.Remove(conversation);
+            await Db.SaveChangesAsync();
+            pendingDeleteId = null;
+            errorMessage = null;
+            await LoadConversations();
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to delete chat conversation {ConversationId} for the current user.", conversationId);
+            errorMessage = "Kwenta couldn't delete that conversation. Please try again.";
+        }
+    }
+
+    private async Task<string?> GetCurrentUserId()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+    }
+
+    private sealed record ConversationListItem(int Id, string Title, DateTime UpdatedAt);
+}

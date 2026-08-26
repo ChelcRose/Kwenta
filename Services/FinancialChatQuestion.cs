@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace Kwenta.Services;
 
 public enum FinancialChatQuestion
@@ -46,7 +48,7 @@ public static class FinancialChatQuestionRouter
             return true;
         }
 
-        var normalized = question.Trim().TrimEnd('?', '.', '!').ToLowerInvariant();
+        var normalized = NormalizeQuestion(question);
 
         route = normalized switch
         {
@@ -98,5 +100,22 @@ public static class FinancialChatQuestionRouter
 
         route = null!;
         return false;
+    }
+
+    private static string NormalizeQuestion(string question)
+    {
+        var withoutTrailingPunctuation = Regex.Replace(
+            question.Trim(),
+            @"\s*[?.!]+\s*$",
+            string.Empty,
+            RegexOptions.CultureInvariant);
+
+        return Regex.Replace(
+                withoutTrailingPunctuation,
+                @"\s+",
+                " ",
+                RegexOptions.CultureInvariant)
+            .Trim()
+            .ToLowerInvariant();
     }
 }

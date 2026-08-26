@@ -33,20 +33,11 @@
     </header>
 
     <section class="surface-card chat-card" aria-label="Financial chat">
-        <div class="chat-suggestions" aria-label="Supported questions">
-            @foreach (var suggestion in SupportedQuestions)
-            {
-                <button type="button" class="chat-suggestion" @onclick="() => UseSuggestion(suggestion)" disabled="@isLoading">
-                    @suggestion
-                </button>
-            }
-        </div>
-
         <div class="chat-conversation" aria-live="polite" aria-busy="@isLoading">
             @if (messages.Count == 0)
             {
                 <div class="empty-state chat-empty">
-                    Choose one of the supported questions above or type it below.
+                    Ask a question about your money below, or choose a suggested prompt.
                 </div>
             }
             else
@@ -299,34 +290,86 @@
             </div>
             <button type="submit" class="app-button app-button-primary" disabled="@isLoading">Send</button>
         </EditForm>
+
+        <div class="chat-prompt-help">
+            <div class="chat-prompt-heading">
+                <span>Try asking</span>
+                <button type="button"
+                        class="chat-more-button"
+                        @onclick="ToggleQuestionHelp"
+                        aria-expanded="@showAllQuestions"
+                        aria-controls="supported-question-list">
+                    @(showAllQuestions ? "Show less" : "More questions")
+                </button>
+            </div>
+
+            <div class="chat-suggestions" aria-label="Suggested questions">
+                @foreach (var suggestion in FeaturedQuestions)
+                {
+                    <button type="button" class="chat-suggestion" @onclick="() => UseSuggestion(suggestion)" disabled="@isLoading">
+                        @suggestion
+                    </button>
+                }
+            </div>
+
+            @if (showAllQuestions)
+            {
+                <div id="supported-question-list" class="chat-question-library" aria-label="All supported questions">
+                    <p>Here are the things Kwenta currently understands:</p>
+                    <div class="chat-question-groups">
+                        @foreach (var group in QuestionGroups)
+                        {
+                            <section class="chat-question-group" aria-labelledby="@group.Id">
+                                <h3 id="@group.Id">@group.Name</h3>
+                                <div class="chat-question-grid">
+                                    @foreach (var suggestion in group.Questions)
+                                    {
+                                        <button type="button" class="chat-question-option" @onclick="() => UseSuggestion(suggestion)" disabled="@isLoading">
+                                            @suggestion
+                                        </button>
+                                    }
+                                </div>
+                            </section>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
     </section>
 </div>
 
 @code {
-    private static readonly string[] SupportedQuestions =
+    private static readonly string[] FeaturedQuestions =
     [
         "How much did I spend this month?",
-        "How much income did I receive this month?",
-        "Where did most of my money go this month?",
-        "What is my top spending category this month?",
-        "What was my biggest expense this month?",
-        "Did I have any unusually large expenses this month?",
         "How much budget do I have left this month?",
-        "Am I over budget anywhere this month?",
-        "How much do I have left for Food this month?",
-        "Which budget is closest to being used up?",
-        "Am I likely to go over budget this month?",
-        "Am I saving more than last month?",
-        "How much did I save this month?",
-        "How much did I save last month?",
-        "How have my savings changed from last month?",
-        "Am I spending more than last month?",
-        "How much did I spend last month?",
-        "How has my spending changed from last month?",
-        "Compare my spending this month to last month.",
-        "Can I buy ₱180 milk tea?",
-        "Help me save for ₱11,000 AirPods.",
-        "Spent ₱180 on milk tea using GCash after class."
+        "Can I buy ₱180 milk tea?"
+    ];
+
+    private static readonly QuestionGroup[] QuestionGroups =
+    [
+        new("question-group-insights", "Understand your money",
+        [
+            "How much income did I receive this month?",
+            "What is my top spending category this month?",
+            "What was my biggest expense this month?",
+            "Did I have any unusually large expenses this month?",
+            "Compare my spending this month to last month."
+        ]),
+        new("question-group-planning", "Plan and decide",
+        [
+            "Am I likely to go over budget this month?",
+            "How have my savings changed from last month?",
+            "Can I buy ₱180 milk tea?",
+            "Help me save for ₱11,000 AirPods."
+        ]),
+        new("question-group-actions", "Record and move money",
+        [
+            "Spent ₱180 on milk tea using GCash after class.",
+            "Got my ₱2,500 allowance.",
+            "Transfer ₱500 from GCash to Maya.",
+            "End my week."
+        ])
     ];
 
     private static readonly CultureInfo PhilippineCulture = CultureInfo.GetCultureInfo("en-PH");
@@ -342,6 +385,7 @@
     private string? expenseSaveSuccess;
     private bool isSavingExpense;
     private bool isLoading;
+    private bool showAllQuestions;
     private AllowanceConfirmationInput? allowanceConfirmation;
     private List<FinancialAccount> allowanceAccounts = [];
     private string? allowanceConfirmationError;
@@ -357,7 +401,10 @@
     {
         input.Message = suggestion;
         errorMessage = null;
+        showAllQuestions = false;
     }
+
+    private void ToggleQuestionHelp() => showAllQuestions = !showAllQuestions;
 
     private async Task SendMessage()
     {
@@ -1062,6 +1109,8 @@
         $"₱{amount.ToString("N2", PhilippineCulture)}";
 
     private sealed record ChatMessage(bool IsUser, string Text);
+
+    private sealed record QuestionGroup(string Id, string Name, IReadOnlyList<string> Questions);
 
     private sealed class ExpenseConfirmationInput : IValidatableObject
     {

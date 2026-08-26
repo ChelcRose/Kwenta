@@ -47,9 +47,9 @@ builder.Services.AddScoped<PurchasePlanAnalysisService>();
 builder.Services.AddScoped<ExpenseDraftParserService>();
 builder.Services.AddScoped<WeeklyAllowanceService>();
 builder.Services.AddScoped<TransferService>();
-builder.Services.AddHttpClient<IFinancialChatAiService, OpenAiFinancialChatService>(client =>
+builder.Services.AddHttpClient<IFinancialChatAiService, GeminiFinancialChatService>(client =>
 {
-    client.BaseAddress = new Uri("https://api.openai.com/");
+    client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 

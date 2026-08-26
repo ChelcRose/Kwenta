@@ -10,7 +10,6 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.55rem;
-    margin-bottom: 1.25rem;
 }
 
 .chat-suggestion {
@@ -25,6 +24,94 @@
 
 .chat-suggestion:hover:not(:disabled) {
     border-color: #8fb5a5;
+    background: #edf6f1;
+}
+
+.chat-prompt-help {
+    margin-top: 0.85rem;
+    border-top: 1px solid #e5ebe8;
+    padding-top: 0.85rem;
+}
+
+.chat-prompt-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.65rem;
+    color: #64756d;
+    font-size: 0.78rem;
+    font-weight: 750;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.chat-more-button {
+    border: 0;
+    background: transparent;
+    color: #177557;
+    padding: 0.25rem 0;
+    font-size: 0.82rem;
+    font-weight: 700;
+    text-transform: none;
+}
+
+.chat-more-button:hover {
+    text-decoration: underline;
+}
+
+.chat-more-button:focus-visible,
+.chat-question-option:focus-visible,
+.chat-suggestion:focus-visible {
+    outline: 3px solid rgba(23, 117, 87, 0.2);
+    outline-offset: 2px;
+}
+
+.chat-question-library {
+    margin-top: 0.85rem;
+    border: 1px solid #dce6e1;
+    border-radius: 0.8rem;
+    background: #f8faf9;
+    padding: 0.85rem;
+}
+
+.chat-question-library > p {
+    margin: 0 0 0.7rem;
+    color: #64756d;
+    font-size: 0.82rem;
+}
+
+.chat-question-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
+}
+
+.chat-question-groups {
+    display: grid;
+    gap: 1rem;
+}
+
+.chat-question-group h3 {
+    margin: 0 0 0.5rem;
+    color: #315249;
+    font-size: 0.78rem;
+    font-weight: 750;
+}
+
+.chat-question-option {
+    border: 1px solid transparent;
+    border-radius: 0.55rem;
+    background: #fff;
+    color: #315249;
+    padding: 0.55rem 0.65rem;
+    font-size: 0.8rem;
+    line-height: 1.35;
+    text-align: left;
+}
+
+.chat-question-option:hover:not(:disabled) {
+    border-color: #b8cec4;
     background: #edf6f1;
 }
 
@@ -214,6 +301,22 @@
     .chat-input-wrap {
         justify-content: center;
         width: 100%;
+    }
+
+    .chat-prompt-heading {
+        align-items: flex-start;
+    }
+
+    .chat-suggestions {
+        flex-direction: column;
+    }
+
+    .chat-suggestion {
+        width: 100%;
+    }
+
+    .chat-question-grid {
+        grid-template-columns: 1fr;
     }
 
     .expense-confirmation-grid {

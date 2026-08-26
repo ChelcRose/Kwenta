@@ -1,0 +1,158 @@
+@page "/faq"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+
+<PageTitle>FAQ</PageTitle>
+
+<div class="app-page faq-page">
+    <header class="page-header faq-header">
+        <div>
+            <span class="faq-eyebrow">Help center</span>
+            <h1>Frequently Asked Questions</h1>
+            <p class="page-subtitle">Quick answers about tracking money and asking Kwenta about your finances.</p>
+        </div>
+        <a href="/chat" class="app-button app-button-primary">Ask Kwenta</a>
+    </header>
+
+    <section class="faq-section" aria-labelledby="faq-getting-started">
+        <div class="faq-section-heading">
+            <h2 id="faq-getting-started">Getting started</h2>
+            <p>Learn how the main parts of Kwenta work together.</p>
+        </div>
+
+        <div class="faq-list">
+            <details open>
+                <summary>How do I start tracking my money?</summary>
+                <div class="faq-answer">
+                    <p>Create a financial account first, then record income and expenses against that account. Kwenta calculates the current balance from your starting balance and transactions.</p>
+                    <a href="/accounts">Go to Accounts</a>
+                </div>
+            </details>
+
+            <details>
+                <summary>How is my account balance calculated?</summary>
+                <div class="faq-answer">
+                    <p>Kwenta uses the deterministic formula:</p>
+                    <code>Starting Balance + Income - Expenses</code>
+                    <p>Transfers move money between your accounts without changing your combined total balance.</p>
+                </div>
+            </details>
+
+            <details>
+                <summary>Where can I review my transactions?</summary>
+                <div class="faq-answer">
+                    <p>The Transactions page shows your income and expenses newest first. You can also edit or delete transactions there.</p>
+                    <a href="/transactions">View Transactions</a>
+                </div>
+            </details>
+        </div>
+    </section>
+
+    <section class="faq-section" aria-labelledby="faq-allowance">
+        <div class="faq-section-heading">
+            <h2 id="faq-allowance">Weekly allowance</h2>
+            <p>Track a weekly amount separately while keeping account balances accurate.</p>
+        </div>
+
+        <div class="faq-list">
+            <details>
+                <summary>What does Weekly Allowance do?</summary>
+                <div class="faq-answer">
+                    <p>It records the allowance you received, distributes it across your accounts as Income, and tracks only the expenses you choose to count against that week.</p>
+                    <a href="/allowance">Open Weekly Allowance</a>
+                </div>
+            </details>
+
+            <details>
+                <summary>How do I count an expense against my allowance?</summary>
+                <div class="faq-answer">
+                    <p>When an allowance is active, select “Count this against this week's allowance” while adding or confirming an expense. The expense date must fall within the active allowance period.</p>
+                </div>
+            </details>
+
+            <details>
+                <summary>What can I ask Kwenta about my allowance?</summary>
+                <div class="faq-answer">
+                    <p>You can use natural variations such as:</p>
+                    <ul>
+                        <li>“How much do I have left?”</li>
+                        <li>“Show my allowance overview.”</li>
+                        <li>“How much of my allowance have I spent?”</li>
+                        <li>“Show my allowance allocations.”</li>
+                        <li>“Which accounts received my allowance?”</li>
+                        <li>“How is my allowance split across accounts?”</li>
+                    </ul>
+                </div>
+            </details>
+        </div>
+    </section>
+
+    <section class="faq-section" aria-labelledby="faq-chat">
+        <div class="faq-section-heading">
+            <h2 id="faq-chat">Ask Kwenta</h2>
+            <p>Understand what the assistant can do and how your data is handled.</p>
+        </div>
+
+        <div class="faq-list">
+            <details>
+                <summary>What kinds of questions can I ask?</summary>
+                <div class="faq-answer">
+                    <p>Kwenta understands questions about transactions, income, spending, categories, budgets, savings, allowance, affordability, purchase plans, and month-to-month comparisons.</p>
+                    <p>Examples include:</p>
+                    <ul>
+                        <li>“How much did I spend this month?”</li>
+                        <li>“Where did most of my money go?”</li>
+                        <li>“Am I likely to go over budget?”</li>
+                        <li>“Can I buy milk tea for 200 pesos?”</li>
+                        <li>“Help me save for ₱11,000 AirPods.”</li>
+                    </ul>
+                </div>
+            </details>
+
+            <details>
+                <summary>Does AI calculate my balances and totals?</summary>
+                <div class="faq-answer">
+                    <p>No. C# and the database calculate authoritative amounts, balances, percentages, and recommendations. AI may only explain those calculated facts conversationally.</p>
+                </div>
+            </details>
+
+            <details>
+                <summary>Can Kwenta create a transaction from a message?</summary>
+                <div class="faq-answer">
+                    <p>Kwenta can prepare an editable expense or transfer draft from natural language, but nothing is saved until you review and explicitly confirm it.</p>
+                </div>
+            </details>
+
+            <details>
+                <summary>Where is my chat history?</summary>
+                <div class="faq-answer">
+                    <p>Saved conversation logs are under Account Settings → Chat history. Stored messages are for display only and are not used as long-term AI memory.</p>
+                    <a href="/Account/Manage/ChatHistory">Open Chat History</a>
+                </div>
+            </details>
+        </div>
+    </section>
+
+    <section class="faq-section" aria-labelledby="faq-privacy">
+        <div class="faq-section-heading">
+            <h2 id="faq-privacy">Privacy and safety</h2>
+            <p>Your financial records remain tied to your authenticated account.</p>
+        </div>
+
+        <div class="faq-list">
+            <details>
+                <summary>Can another user see my financial data?</summary>
+                <div class="faq-answer">
+                    <p>No. Accounts, transactions, budgets, savings goals, allowances, custom categories, transfers, and chat conversations are queried using your authenticated user identity.</p>
+                </div>
+            </details>
+
+            <details>
+                <summary>Does Kwenta connect directly to my bank or e-wallet?</summary>
+                <div class="faq-answer">
+                    <p>No. Kwenta currently uses financial accounts and transactions that you enter manually. It does not synchronize with GCash, Maya, or bank accounts.</p>
+                </div>
+            </details>
+        </div>
+    </section>
+</div>

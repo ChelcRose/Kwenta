@@ -1,0 +1,140 @@
+
+.faq-page {
+    max-width: 980px;
+}
+
+.faq-header {
+    align-items: flex-end;
+}
+
+.faq-eyebrow {
+    display: block;
+    margin-bottom: 0.35rem;
+    color: #177557;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.faq-section {
+    margin-top: 1.4rem;
+}
+
+.faq-section-heading {
+    margin-bottom: 0.7rem;
+}
+
+.faq-section-heading h2 {
+    margin: 0;
+    color: #263b34;
+    font-size: 1.05rem;
+    font-weight: 760;
+}
+
+.faq-section-heading p {
+    margin: 0.25rem 0 0;
+    color: #718078;
+    font-size: 0.84rem;
+}
+
+.faq-list {
+    display: grid;
+    gap: 0.6rem;
+}
+
+.faq-list details {
+    border: 1px solid #dfe7e2;
+    border-radius: 0.8rem;
+    background: #fff;
+    box-shadow: 0 6px 20px rgba(27, 52, 43, 0.04);
+    overflow: hidden;
+}
+
+.faq-list details[open] {
+    border-color: #b8d2c6;
+}
+
+.faq-list summary {
+    position: relative;
+    cursor: pointer;
+    padding: 0.9rem 2.7rem 0.9rem 1rem;
+    color: #315249;
+    font-size: 0.9rem;
+    font-weight: 730;
+    list-style: none;
+}
+
+.faq-list summary::-webkit-details-marker {
+    display: none;
+}
+
+.faq-list summary::after {
+    position: absolute;
+    top: 50%;
+    right: 1rem;
+    color: #177557;
+    content: "+";
+    font-size: 1.15rem;
+    transform: translateY(-50%);
+}
+
+.faq-list details[open] summary::after {
+    content: "−";
+}
+
+.faq-list summary:focus-visible {
+    outline: 3px solid rgba(23, 117, 87, 0.2);
+    outline-offset: -3px;
+}
+
+.faq-answer {
+    border-top: 1px solid #e8eeeb;
+    color: #596861;
+    padding: 0.85rem 1rem 1rem;
+    font-size: 0.86rem;
+    line-height: 1.55;
+}
+
+.faq-answer p {
+    margin: 0 0 0.65rem;
+}
+
+.faq-answer p:last-child {
+    margin-bottom: 0;
+}
+
+.faq-answer ul {
+    margin: 0.4rem 0 0.7rem;
+    padding-left: 1.2rem;
+}
+
+.faq-answer li + li {
+    margin-top: 0.25rem;
+}
+
+.faq-answer a {
+    color: #177557;
+    font-weight: 700;
+}
+
+.faq-answer code {
+    display: inline-block;
+    margin: 0 0 0.65rem;
+    border-radius: 0.45rem;
+    background: #edf6f1;
+    color: #126648;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.8rem;
+}
+
+@media (max-width: 640px) {
+    .faq-header {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .faq-header .app-button {
+        width: 100%;
+    }
+}

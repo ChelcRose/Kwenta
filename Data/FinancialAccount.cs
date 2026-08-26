@@ -17,4 +17,10 @@ public class FinancialAccount
     public bool IsArchived { get; set; }
 
     public ICollection<Transaction> Transactions { get; set; } = [];
+
+    public ICollection<WeeklyAllowanceAllocation> WeeklyAllowanceAllocations { get; set; } = [];
+
+    public ICollection<Transfer> TransfersOut { get; set; } = [];
+
+    public ICollection<Transfer> TransfersIn { get; set; } = [];
 }

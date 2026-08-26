@@ -85,6 +85,17 @@
         <InputTextArea id="expense-description" @bind-Value="expense.Description" />
     </div>
 
+    @if (activeAllowance is not null)
+    {
+        <div class="form-field form-field-full">
+            <label>
+                <InputCheckbox @bind-Value="expense.CountAgainstAllowance" />
+                Count this against this week's allowance
+            </label>
+            <span class="muted-text">@activeAllowance.StartDate.ToString("MMM d") – @activeAllowance.EndDate.ToString("MMM d")</span>
+        </div>
+    }
+
     </div>
     <div class="form-actions">
         <button type="submit" class="app-button app-button-primary" disabled="@(accounts.Count == 0)">Add Expense</button>
@@ -136,6 +147,7 @@ else
     private List<FinancialAccount> accounts = [];
     private List<Category> expenseCategories = [];
     private List<Transaction> recentExpenses = [];
+    private WeeklyAllowance? activeAllowance;
     private string? saveError;
     private string? successMessage;
 
@@ -158,6 +170,10 @@ else
                  (!category.IsDefault && category.UserId == userId)))
             .OrderBy(category => category.Name)
             .ToListAsync();
+
+        activeAllowance = await Db.WeeklyAllowances.AsNoTracking()
+            .SingleOrDefaultAsync(allowance => allowance.UserId == userId && allowance.IsActive);
+        expense.CountAgainstAllowance = activeAllowance is not null;
 
         await LoadRecentExpenses(userId);
     }
@@ -198,6 +214,19 @@ else
             return;
         }
 
+        WeeklyAllowance? allowance = null;
+        if (expense.CountAgainstAllowance)
+        {
+            allowance = await Db.WeeklyAllowances.AsNoTracking().SingleOrDefaultAsync(item =>
+                item.UserId == userId && item.IsActive &&
+                expense.Date >= item.StartDate && expense.Date <= item.EndDate);
+            if (allowance is null)
+            {
+                saveError = "The expense date must fall within your active weekly allowance period.";
+                return;
+            }
+        }
+
         var transaction = new Transaction
         {
             UserId = userId,
@@ -209,13 +238,15 @@ else
             Merchant = expense.Merchant.Trim(),
             Description = string.IsNullOrWhiteSpace(expense.Description)
                 ? null
-                : expense.Description.Trim()
+                : expense.Description.Trim(),
+            WeeklyAllowanceId = allowance?.Id
         };
 
         Db.Transactions.Add(transaction);
         await Db.SaveChangesAsync();
 
         expense = NewExpense();
+        expense.CountAgainstAllowance = activeAllowance is not null;
         successMessage = "Expense added.";
 
         await LoadRecentExpenses(userId);
@@ -272,6 +303,8 @@ else
         public string Merchant { get; set; } = string.Empty;
 
         public string? Description { get; set; }
+
+        public bool CountAgainstAllowance { get; set; }
 
         public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
         {

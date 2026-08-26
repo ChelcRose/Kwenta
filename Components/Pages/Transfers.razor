@@ -1,0 +1,96 @@
+@page "/transfers"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using System.ComponentModel.DataAnnotations
+@using System.Globalization
+@using System.Security.Claims
+@using Kwenta.Data
+@using Kwenta.Services
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Db
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject TransferService TransferService
+
+<PageTitle>Transfers</PageTitle>
+
+<div class="app-page">
+    <header class="page-header"><div><h1>Account Transfers</h1><p class="page-subtitle">Move money between your accounts without changing your total money.</p></div></header>
+
+    <EditForm Model="input" OnValidSubmit="SaveTransfer" FormName="CreateTransfer" class="surface-card form-card">
+        <DataAnnotationsValidator /><ValidationSummary />
+        <h2 class="section-heading">New transfer</h2>
+        @if (!string.IsNullOrWhiteSpace(error)) { <p class="status-message status-error" role="alert">@error</p> }
+        @if (!string.IsNullOrWhiteSpace(success)) { <p class="status-message status-success" role="status">@success</p> }
+        <div class="form-grid">
+            <div class="form-field"><label for="transfer-from">From account</label><InputSelect id="transfer-from" @bind-Value="input.FromAccountId"><option value="">Select source</option>@foreach (var account in accounts){<option value="@account.Id">@account.Name</option>}</InputSelect></div>
+            <div class="form-field"><label for="transfer-to">To account</label><InputSelect id="transfer-to" @bind-Value="input.ToAccountId"><option value="">Select destination</option>@foreach (var account in accounts){<option value="@account.Id">@account.Name</option>}</InputSelect></div>
+            <div class="form-field"><label for="transfer-amount">Amount</label><InputNumber id="transfer-amount" @bind-Value="input.Amount" step="0.01" /></div>
+            <div class="form-field"><label for="transfer-date">Date</label><InputDate id="transfer-date" @bind-Value="input.Date" /></div>
+            <div class="form-field form-field-full"><label for="transfer-description">Description (optional)</label><InputTextArea id="transfer-description" @bind-Value="input.Description" /></div>
+        </div>
+        <div class="form-actions"><button type="submit" class="app-button app-button-primary" disabled="@(isSaving || accounts.Count < 2)">@(isSaving ? "Transferring…" : "Transfer Money")</button></div>
+    </EditForm>
+
+    <section class="content-section"><div class="section-bar"><h2>Recent transfers</h2></div>
+        @if (recent.Count == 0) { <div class="empty-state">No transfers yet.</div> }
+        else {
+            <div class="surface-card data-table-wrap"><table class="data-table">
+                <thead><tr><th>Amount</th><th>From</th><th>To</th><th>Date</th><th>Description</th></tr></thead>
+                <tbody>@foreach (var transfer in recent){<tr><td data-label="Amount" class="money-value">@FormatPeso(transfer.Amount)</td><td data-label="From">@transfer.FromAccount.Name</td><td data-label="To">@transfer.ToAccount.Name</td><td data-label="Date">@transfer.Date.ToString("MMM d, yyyy", PhilippineCulture)</td><td data-label="Description">@(transfer.Description ?? "—")</td></tr>}</tbody>
+            </table></div>
+        }
+    </section>
+</div>
+
+@code {
+    private static readonly CultureInfo PhilippineCulture = CultureInfo.GetCultureInfo("en-PH");
+    private TransferInput input = NewInput();
+    private List<FinancialAccount> accounts = [];
+    private List<Transfer> recent = [];
+    private string? error;
+    private string? success;
+    private bool isSaving;
+
+    protected override async Task OnInitializedAsync() => await Load();
+    private async Task Load()
+    {
+        var userId = await GetUserId(); if (userId is null) return;
+        accounts = await Db.FinancialAccounts.AsNoTracking().Where(a => a.UserId == userId && !a.IsArchived).OrderBy(a => a.Name).ToListAsync();
+        recent = await Db.Transfers.AsNoTracking().Include(t => t.FromAccount).Include(t => t.ToAccount)
+            .Where(t => t.UserId == userId && t.FromAccount.UserId == userId && t.ToAccount.UserId == userId)
+            .OrderByDescending(t => t.Date).ThenByDescending(t => t.Id).Take(10).ToListAsync();
+    }
+
+    private async Task SaveTransfer()
+    {
+        if (isSaving) return; error = null; success = null; isSaving = true;
+        try
+        {
+            var userId = await GetUserId(); if (userId is null) { error = "Please log in again."; return; }
+            var result = await TransferService.CreateAsync(userId, input.FromAccountId!.Value, input.ToAccountId!.Value,
+                input.Amount!.Value, input.Date!.Value, input.Description);
+            if (!result.IsSuccess) { error = result.Error; return; }
+            success = $"Transferred {FormatPeso(input.Amount.Value)} from {result.FromAccountName} to {result.ToAccountName}.";
+            input = NewInput(); await Load();
+        }
+        finally { isSaving = false; }
+    }
+
+    private async Task<string?> GetUserId(){var state=await AuthenticationStateProvider.GetAuthenticationStateAsync();return state.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;}
+    private static TransferInput NewInput()=>new(){Date=DateOnly.FromDateTime(DateTime.Today)};
+    private static string FormatPeso(decimal amount)=>$"₱{amount.ToString("N2",PhilippineCulture)}";
+    private sealed class TransferInput : IValidatableObject
+    {
+        [Required] public int? FromAccountId { get; set; }
+        [Required] public int? ToAccountId { get; set; }
+        [Required, Range(typeof(decimal),"0.01","999999999999.99")] public decimal? Amount { get; set; }
+        [Required] public DateOnly? Date { get; set; }
+        public string? Description { get; set; }
+        public IEnumerable<ValidationResult> Validate(ValidationContext context)
+        {
+            if (FromAccountId is not null && FromAccountId == ToAccountId) yield return new("Choose two different accounts.",[nameof(ToAccountId)]);
+            if (Amount is decimal amount && decimal.Round(amount,2)!=amount) yield return new("Amount can have at most two decimal places.",[nameof(Amount)]);
+        }
+    }
+}

@@ -23,4 +23,8 @@ public class Transaction
     public string Merchant { get; set; } = string.Empty;
 
     public string? Description { get; set; }
+
+    public int? WeeklyAllowanceId { get; set; }
+
+    public WeeklyAllowance? WeeklyAllowance { get; set; }
 }

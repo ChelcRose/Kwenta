@@ -17,6 +17,8 @@
 @inject AffordabilityAnalysisService AffordabilityAnalysis
 @inject PurchasePlanAnalysisService PurchasePlanAnalysis
 @inject ExpenseDraftParserService ExpenseDraftParser
+@inject WeeklyAllowanceService AllowanceService
+@inject TransferService TransferService
 @inject IFinancialChatAiService AiService
 @inject ILogger<Chat> Logger
 
@@ -137,6 +139,16 @@
                         <label for="parsed-expense-description">Description (optional)</label>
                         <InputTextArea id="parsed-expense-description" @bind-Value="expenseConfirmation.Description" />
                     </div>
+
+                    @if (activeExpenseAllowance is not null)
+                    {
+                        <div class="form-field form-field-full">
+                            <label>
+                                <InputCheckbox @bind-Value="expenseConfirmation.CountAgainstAllowance" />
+                                Count this against this week's allowance
+                            </label>
+                        </div>
+                    }
                 </div>
 
                 @if (expenseDraftMissingFields.Count > 0)
@@ -170,6 +182,96 @@
                 </div>
 
                 <p class="expense-draft-footnote">Nothing is saved until you press Confirm Transaction.</p>
+            </EditForm>
+        }
+
+
+        @if (allowanceConfirmation is not null)
+        {
+            <EditForm Model="allowanceConfirmation" OnValidSubmit="ConfirmAllowance" FormName="ConfirmWeeklyAllowance" class="expense-draft">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+                <div class="expense-draft-heading">
+                    <div><span class="chat-message-label">Review before creating</span><h2>Confirm weekly allowance</h2></div>
+                    <span class="badge-soft badge-success">Allowance</span>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(allowanceConfirmationError))
+                {
+                    <p class="status-message status-error" role="alert">@allowanceConfirmationError</p>
+                }
+                <div class="expense-confirmation-grid">
+                    <div class="form-field">
+                        <label>Amount received</label>
+                        <InputNumber @bind-Value="allowanceConfirmation.AmountReceived" step="0.01" />
+                    </div>
+                    <div class="form-field">
+                        <label>Start date</label>
+                        <InputDate @bind-Value="allowanceConfirmation.StartDate" />
+                    </div>
+                </div>
+                @foreach (var allocation in allowanceConfirmation.Allocations)
+                {
+                    <div class="expense-confirmation-grid" @key="allocation.Key">
+                        <div class="form-field">
+                            <label>Account</label>
+                            <InputSelect @bind-Value="allocation.AccountId">
+                                <option value="">Select an account</option>
+                                @foreach (var account in allowanceAccounts)
+                                {
+                                    <option value="@account.Id">@account.Name</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="form-field">
+                            <label>Allocation</label>
+                            <InputNumber @bind-Value="allocation.Amount" step="0.01" />
+                        </div>
+                        @if (allowanceConfirmation.Allocations.Count > 1)
+                        {
+                            <button type="button" class="app-button app-button-secondary" @onclick="() => allowanceConfirmation.Allocations.Remove(allocation)">Remove</button>
+                        }
+                    </div>
+                }
+                <button type="button" class="app-button app-button-secondary" @onclick="() => allowanceConfirmation.Allocations.Add(new())">Add account</button>
+                <div class="expense-draft-notice">
+                    <p>Total allocated: @FormatPeso(allowanceConfirmation.Allocations.Sum(item => item.Amount ?? 0))</p>
+                    <p>Remaining to allocate: @FormatPeso((allowanceConfirmation.AmountReceived ?? 0) - allowanceConfirmation.Allocations.Sum(item => item.Amount ?? 0))</p>
+                </div>
+                <div class="expense-confirmation-actions">
+                    <button type="submit" class="app-button app-button-primary" disabled="@isSavingAllowance">@(isSavingAllowance ? "Starting…" : "Confirm Weekly Allowance")</button>
+                    <button type="button" class="app-button app-button-secondary" @onclick="DiscardAllowanceDraft" disabled="@isSavingAllowance">Cancel / Discard</button>
+                </div>
+                <p class="expense-draft-footnote">Nothing is created until you confirm. Confirmation atomically creates the allowance, allocations, and Income transactions.</p>
+            </EditForm>
+        }
+
+        @if (showCloseAllowanceConfirmation)
+        {
+            <section class="expense-draft">
+                <h2>End this week?</h2>
+                <p>This preserves the allowance history and does not transfer leftover money.</p>
+                <div class="expense-confirmation-actions">
+                    <button type="button" class="app-button app-button-danger" @onclick="ConfirmCloseAllowance">Confirm End Week</button>
+                    <button type="button" class="app-button app-button-secondary" @onclick="() => showCloseAllowanceConfirmation = false">Cancel</button>
+                </div>
+            </section>
+        }
+
+        @if (transferConfirmation is not null)
+        {
+            <EditForm Model="transferConfirmation" OnValidSubmit="ConfirmTransfer" FormName="ConfirmTransfer" class="expense-draft">
+                <DataAnnotationsValidator /><ValidationSummary />
+                <div class="expense-draft-heading"><div><span class="chat-message-label">Review before moving money</span><h2>Confirm transfer</h2></div><span class="badge-soft badge-neutral">Transfer</span></div>
+                @if (!string.IsNullOrWhiteSpace(transferConfirmationError)){<p class="status-message status-error" role="alert">@transferConfirmationError</p>}
+                <div class="expense-confirmation-grid">
+                    <div class="form-field"><label>From account</label><InputSelect @bind-Value="transferConfirmation.FromAccountId"><option value="">Select source</option>@foreach(var account in transferAccounts){<option value="@account.Id">@account.Name</option>}</InputSelect></div>
+                    <div class="form-field"><label>To account</label><InputSelect @bind-Value="transferConfirmation.ToAccountId"><option value="">Select destination</option>@foreach(var account in transferAccounts){<option value="@account.Id">@account.Name</option>}</InputSelect></div>
+                    <div class="form-field"><label>Amount</label><InputNumber @bind-Value="transferConfirmation.Amount" step="0.01" /></div>
+                    <div class="form-field"><label>Date</label><InputDate @bind-Value="transferConfirmation.Date" /></div>
+                    <div class="form-field form-field-full"><label>Description (optional)</label><InputTextArea @bind-Value="transferConfirmation.Description" /></div>
+                </div>
+                <div class="expense-confirmation-actions"><button type="submit" class="app-button app-button-primary" disabled="@isSavingTransfer">@(isSavingTransfer ? "Transferring…" : "Confirm Transfer")</button><button type="button" class="app-button app-button-secondary" @onclick="DiscardTransferDraft">Cancel / Discard</button></div>
+                <p class="expense-draft-footnote">Nothing moves until you confirm. The account IDs and available balance are revalidated server-side.</p>
             </EditForm>
         }
 
@@ -233,12 +335,22 @@
     private ExpenseConfirmationInput? expenseConfirmation;
     private List<FinancialAccount> expenseAccounts = [];
     private List<Category> expenseCategories = [];
+    private WeeklyAllowance? activeExpenseAllowance;
     private IReadOnlyList<string> expenseDraftMissingFields = [];
     private IReadOnlyList<string> expenseDraftWarnings = [];
     private string? expenseConfirmationError;
     private string? expenseSaveSuccess;
     private bool isSavingExpense;
     private bool isLoading;
+    private AllowanceConfirmationInput? allowanceConfirmation;
+    private List<FinancialAccount> allowanceAccounts = [];
+    private string? allowanceConfirmationError;
+    private bool isSavingAllowance;
+    private bool showCloseAllowanceConfirmation;
+    private TransferConfirmationInput? transferConfirmation;
+    private List<FinancialAccount> transferAccounts = [];
+    private string? transferConfirmationError;
+    private bool isSavingTransfer;
     private string? errorMessage;
 
     private void UseSuggestion(string suggestion)
@@ -252,13 +364,26 @@
         var questionText = input.Message.Trim();
         errorMessage = null;
         DiscardExpenseDraft();
+        DiscardAllowanceDraft();
+        DiscardTransferDraft();
+        showCloseAllowanceConfirmation = false;
         expenseSaveSuccess = null;
 
-        var isExpenseEntry = ExpenseDraftParserService.LooksLikeExpenseEntry(questionText);
+        var isAllowanceStart = WeeklyAllowanceMessageParser.LooksLikeStart(questionText);
+        var isAllowanceClose = WeeklyAllowanceMessageParser.LooksLikeClose(questionText);
+        var isTransfer = TransferMessageParser.LooksLikeTransfer(questionText);
+        var hasFinancialRoute = false;
         FinancialChatRoute? route = null;
+        if (!isAllowanceStart && !isAllowanceClose && !isTransfer &&
+            FinancialChatQuestionRouter.TryRoute(questionText, out var routedQuestion))
+        {
+            hasFinancialRoute = true;
+            route = routedQuestion;
+        }
+        var isExpenseEntry = !hasFinancialRoute &&
+                             ExpenseDraftParserService.LooksLikeExpenseEntry(questionText);
 
-        if (!isExpenseEntry &&
-            !FinancialChatQuestionRouter.TryRoute(questionText, out route))
+        if (!isExpenseEntry && !hasFinancialRoute && !isAllowanceStart && !isAllowanceClose && !isTransfer)
         {
             errorMessage = PurchaseQuestionParser.LooksLikePurchasePlanQuestion(questionText)
                 ? "Please use a clear PHP target and purchase name, such as: Help me save for ₱11,000 AirPods."
@@ -283,6 +408,24 @@
         try
         {
             var today = DateOnly.FromDateTime(DateTime.Today);
+            if (isTransfer)
+            {
+                await AnswerTransferEntry(userId, today, questionText);
+                return;
+            }
+            if (isAllowanceStart)
+            {
+                await AnswerAllowanceEntry(userId, today, questionText);
+                return;
+            }
+
+            if (isAllowanceClose)
+            {
+                showCloseAllowanceConfirmation = true;
+                messages.Add(new ChatMessage(false, "Review the End Week confirmation below. Nothing has been closed yet."));
+                return;
+            }
+
             if (isExpenseEntry)
             {
                 await AnswerExpenseEntry(userId, today, questionText);
@@ -600,6 +743,151 @@
                  (!category.IsDefault && category.UserId == userId)))
             .OrderBy(category => category.Name)
             .ToListAsync();
+
+        activeExpenseAllowance = await Db.WeeklyAllowances.AsNoTracking()
+            .SingleOrDefaultAsync(allowance => allowance.UserId == userId && allowance.IsActive);
+        if (expenseConfirmation is not null)
+        {
+            expenseConfirmation.CountAgainstAllowance = activeExpenseAllowance is not null;
+        }
+    }
+
+    private async Task AnswerAllowanceEntry(string userId, DateOnly today, string message)
+    {
+        if (await Db.WeeklyAllowances.AnyAsync(item => item.UserId == userId && item.IsActive))
+        {
+            messages.Add(new ChatMessage(false, "You already have an active weekly allowance. Close it before starting another one."));
+            return;
+        }
+
+        allowanceAccounts = await Db.FinancialAccounts.AsNoTracking()
+            .Where(account => account.UserId == userId && !account.IsArchived)
+            .OrderBy(account => account.Name)
+            .ToListAsync();
+        var parsed = WeeklyAllowanceMessageParser.Parse(message,
+            allowanceAccounts.Select(account => new AllowanceAccountCandidate(account.Id, account.Name, account.Provider)).ToList());
+        allowanceConfirmation = new AllowanceConfirmationInput
+        {
+            AmountReceived = parsed.AmountReceived,
+            StartDate = today,
+            Allocations = parsed.Allocations.Select(item => new AllowanceAllocationInput
+            {
+                AccountId = item.AccountId,
+                Amount = item.Amount
+            }).ToList()
+        };
+        if (allowanceConfirmation.Allocations.Count == 0)
+            allowanceConfirmation.Allocations.Add(new());
+
+        allowanceConfirmationError = parsed.Warnings.Count == 0
+            ? null
+            : string.Join(" ", parsed.Warnings);
+        messages.Add(new ChatMessage(false,
+            "I prepared a weekly allowance draft. Allocate the full amount across your accounts, review it, then explicitly confirm."));
+    }
+
+    private async Task AnswerTransferEntry(string userId, DateOnly today, string message)
+    {
+        transferAccounts = await Db.FinancialAccounts.AsNoTracking()
+            .Where(account => account.UserId == userId && !account.IsArchived)
+            .OrderBy(account => account.Name).ToListAsync();
+        var draft = TransferMessageParser.Parse(message,
+            transferAccounts.Select(account => new TransferAccountCandidate(account.Id, account.Name, account.Provider)).ToList());
+        transferConfirmation = new TransferConfirmationInput
+        {
+            Amount = draft.Amount,
+            FromAccountId = draft.FromAccountId,
+            ToAccountId = draft.ToAccountId,
+            Date = today,
+            Description = message
+        };
+        transferConfirmationError = draft.Warning;
+        messages.Add(new ChatMessage(false,
+            "I prepared a transfer draft. Review both accounts and the amount, then explicitly confirm if you want to move the money."));
+    }
+
+    private async Task ConfirmTransfer()
+    {
+        if (transferConfirmation is null || isSavingTransfer) return;
+        transferConfirmationError = null;
+        isSavingTransfer = true;
+        try
+        {
+            var userId = await GetCurrentUserId();
+            if (userId is null) { transferConfirmationError = "Please log in again."; return; }
+            var result = await TransferService.CreateAsync(userId,
+                transferConfirmation.FromAccountId!.Value,
+                transferConfirmation.ToAccountId!.Value,
+                transferConfirmation.Amount!.Value,
+                transferConfirmation.Date!.Value,
+                transferConfirmation.Description);
+            if (!result.IsSuccess) { transferConfirmationError = result.Error; return; }
+            var amount = transferConfirmation.Amount.Value;
+            DiscardTransferDraft();
+            messages.Add(new ChatMessage(false,
+                $"Transferred {FormatPeso(amount)} from {result.FromAccountName} to {result.ToAccountName}. " +
+                $"{result.FromAccountName} balance: {FormatPeso(result.FromBalance!.Value)}. " +
+                $"{result.ToAccountName} balance: {FormatPeso(result.ToBalance!.Value)}. " +
+                $"Total balance unchanged: {FormatPeso(result.TotalBalance!.Value)}."));
+        }
+        finally { isSavingTransfer = false; }
+    }
+
+    private void DiscardTransferDraft()
+    {
+        transferConfirmation = null;
+        transferAccounts = [];
+        transferConfirmationError = null;
+    }
+
+    private async Task ConfirmAllowance()
+    {
+        if (allowanceConfirmation is null || isSavingAllowance) return;
+        allowanceConfirmationError = null;
+        if (allowanceConfirmation.AmountReceived is null || allowanceConfirmation.AmountReceived <= 0 ||
+            allowanceConfirmation.StartDate is null ||
+            allowanceConfirmation.Allocations.Any(item => item.AccountId is null || item.Amount is null))
+        {
+            allowanceConfirmationError = "Complete the amount, start date, and every allocation.";
+            return;
+        }
+
+        isSavingAllowance = true;
+        try
+        {
+            var userId = await GetCurrentUserId();
+            if (userId is null) { allowanceConfirmationError = "Please log in again."; return; }
+            var result = await AllowanceService.CreateAsync(userId,
+                allowanceConfirmation.AmountReceived.Value,
+                allowanceConfirmation.StartDate.Value,
+                allowanceConfirmation.Allocations.Select(item =>
+                    new AllowanceAllocationRequest(item.AccountId!.Value, item.Amount!.Value)).ToList());
+            if (!result.IsSuccess) { allowanceConfirmationError = result.Error; return; }
+            DiscardAllowanceDraft();
+            messages.Add(new ChatMessage(false,
+                "Weekly allowance confirmed. Its complete distribution was recorded as Income; no starting balances were changed."));
+        }
+        finally { isSavingAllowance = false; }
+    }
+
+    private async Task ConfirmCloseAllowance()
+    {
+        var userId = await GetCurrentUserId();
+        if (userId is null) { errorMessage = "Please log in again."; return; }
+        var progress = await AllowanceService.GetActiveProgressAsync(userId);
+        if (progress is null) { errorMessage = "No active weekly allowance was found."; return; }
+        var result = await AllowanceService.CloseActiveAsync(userId);
+        if (!result.IsSuccess) { errorMessage = result.Error; return; }
+        showCloseAllowanceConfirmation = false;
+        messages.Add(new ChatMessage(false,
+            $"Week closed. {FormatPeso(progress.Remaining)} remains from this week's allowance. No money was transferred."));
+    }
+
+    private void DiscardAllowanceDraft()
+    {
+        allowanceConfirmation = null;
+        allowanceAccounts = [];
+        allowanceConfirmationError = null;
     }
 
     private async Task ConfirmExpense()
@@ -651,6 +939,20 @@
                 return;
             }
 
+            WeeklyAllowance? allowance = null;
+            if (expenseConfirmation.CountAgainstAllowance)
+            {
+                allowance = await Db.WeeklyAllowances.AsNoTracking().SingleOrDefaultAsync(item =>
+                    item.UserId == userId && item.IsActive &&
+                    expenseConfirmation.Date >= item.StartDate &&
+                    expenseConfirmation.Date <= item.EndDate);
+                if (allowance is null)
+                {
+                    expenseConfirmationError = "The expense date must fall within your active weekly allowance period.";
+                    return;
+                }
+            }
+
             transaction = new Transaction
             {
                 UserId = userId,
@@ -662,15 +964,31 @@
                 Merchant = expenseConfirmation.Merchant.Trim(),
                 Description = string.IsNullOrWhiteSpace(expenseConfirmation.Description)
                     ? null
-                    : expenseConfirmation.Description.Trim()
+                    : expenseConfirmation.Description.Trim(),
+                WeeklyAllowanceId = allowance?.Id
             };
 
             Db.Transactions.Add(transaction);
             await Db.SaveChangesAsync();
 
+            string confirmationMessage;
+            if (allowance is not null)
+            {
+                var allowanceSpent = await Db.Transactions.AsNoTracking()
+                    .Where(item => item.WeeklyAllowanceId == allowance.Id &&
+                        item.UserId == userId && item.FinancialAccount.UserId == userId &&
+                        item.Type == TransactionType.Expense)
+                    .SumAsync(item => item.Amount);
+                confirmationMessage = $"Transaction confirmed and saved. You have {FormatPeso(allowance.AmountReceived - allowanceSpent)} left from this week's allowance.";
+            }
+            else
+            {
+                confirmationMessage = "Transaction confirmed and saved.";
+            }
+
             DiscardExpenseDraft();
             expenseSaveSuccess = "Expense saved successfully. It now appears in transaction history and calculated balances.";
-            messages.Add(new ChatMessage(false, "Transaction confirmed and saved."));
+            messages.Add(new ChatMessage(false, confirmationMessage));
         }
         catch (Exception exception)
         {
@@ -734,6 +1052,7 @@
         expenseConfirmation = null;
         expenseAccounts = [];
         expenseCategories = [];
+        activeExpenseAllowance = null;
         expenseDraftMissingFields = [];
         expenseDraftWarnings = [];
         expenseConfirmationError = null;
@@ -765,6 +1084,8 @@
 
         public string? Description { get; set; }
 
+        public bool CountAgainstAllowance { get; set; }
+
         public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
         {
             if (!string.IsNullOrEmpty(Merchant) && string.IsNullOrWhiteSpace(Merchant))
@@ -781,6 +1102,35 @@
                     [nameof(Amount)]);
             }
         }
+    }
+
+    private sealed class AllowanceConfirmationInput
+    {
+        [Required, Range(typeof(decimal), "0.01", "999999999999.99")]
+        public decimal? AmountReceived { get; set; }
+        [Required] public DateOnly? StartDate { get; set; }
+        public List<AllowanceAllocationInput> Allocations { get; set; } = [];
+    }
+
+    private sealed class TransferConfirmationInput : IValidatableObject
+    {
+        [Required] public int? FromAccountId { get; set; }
+        [Required] public int? ToAccountId { get; set; }
+        [Required, Range(typeof(decimal), "0.01", "999999999999.99")] public decimal? Amount { get; set; }
+        [Required] public DateOnly? Date { get; set; }
+        public string? Description { get; set; }
+        public IEnumerable<ValidationResult> Validate(ValidationContext context)
+        {
+            if (FromAccountId is not null && FromAccountId == ToAccountId) yield return new("Choose two different accounts.", [nameof(ToAccountId)]);
+            if (Amount is decimal amount && decimal.Round(amount, 2) != amount) yield return new("Amount can have at most two decimal places.", [nameof(Amount)]);
+        }
+    }
+
+    private sealed class AllowanceAllocationInput
+    {
+        public Guid Key { get; } = Guid.NewGuid();
+        public int? AccountId { get; set; }
+        public decimal? Amount { get; set; }
     }
 
     private sealed class ChatInput

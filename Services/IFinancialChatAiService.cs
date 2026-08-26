@@ -13,6 +13,36 @@ public interface IFinancialChatAiService
         string description,
         IReadOnlyList<string> validCategoryNames,
         CancellationToken cancellationToken = default);
+
+    Task<ExpenseDraftAiResult> ProposeExpenseDraftAsync(
+        string originalMessage,
+        DateOnly currentDate,
+        IReadOnlyList<ExpenseAccountAiCandidate> activeAccounts,
+        IReadOnlyList<string> validExpenseCategoryNames,
+        CancellationToken cancellationToken = default);
+}
+
+public sealed record ExpenseAccountAiCandidate(string Name, string? Provider);
+
+public sealed record ExpenseDraftAiProposal(
+    string Intent,
+    string? AmountText,
+    string? Merchant,
+    string? AccountReference,
+    string? CategorySuggestion,
+    string? DateText,
+    string? Description,
+    string Confidence);
+
+public sealed record ExpenseDraftAiResult(
+    bool IsConfigured,
+    ExpenseDraftAiProposal? Proposal)
+{
+    public static ExpenseDraftAiResult Proposed(ExpenseDraftAiProposal proposal) =>
+        new(true, proposal);
+
+    public static ExpenseDraftAiResult NoProposal(bool isConfigured = true) =>
+        new(isConfigured, null);
 }
 
 public sealed record ExpenseCategorySuggestionResult(

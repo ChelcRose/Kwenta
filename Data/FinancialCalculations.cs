@@ -5,8 +5,10 @@ public static class FinancialCalculations
     public static decimal AccountBalance(
         decimal startingBalance,
         decimal income,
-        decimal expenses) =>
-        startingBalance + income - expenses;
+        decimal expenses,
+        decimal transfersIn,
+        decimal transfersOut) =>
+        startingBalance + income - expenses + transfersIn - transfersOut;
 
     public static decimal AmountSaved(decimal income, decimal expenses) =>
         income - expenses;

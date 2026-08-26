@@ -46,6 +46,13 @@ public sealed class AffordabilityAnalysisService(
             })
             .ToListAsync(cancellationToken);
 
+        var transfers = await db.Transfers.AsNoTracking()
+            .Where(transfer => transfer.UserId == userId &&
+                transfer.FromAccount.UserId == userId && transfer.ToAccount.UserId == userId &&
+                (accountIds.Contains(transfer.FromAccountId) || accountIds.Contains(transfer.ToAccountId)))
+            .Select(transfer => new { transfer.FromAccountId, transfer.ToAccountId, transfer.Amount })
+            .ToListAsync(cancellationToken);
+
         var totalAvailableBalance = accounts.Sum(account =>
         {
             var accountIncome = accountTransactions
@@ -62,7 +69,9 @@ public sealed class AffordabilityAnalysisService(
             return FinancialCalculations.AccountBalance(
                 account.StartingBalance,
                 accountIncome,
-                accountExpenses);
+                accountExpenses,
+                transfers.Where(transfer => transfer.ToAccountId == account.Id).Sum(transfer => transfer.Amount),
+                transfers.Where(transfer => transfer.FromAccountId == account.Id).Sum(transfer => transfer.Amount));
         });
 
         var currentMonthTransactions = await db.Transactions

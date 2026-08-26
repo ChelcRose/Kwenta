@@ -1,0 +1,331 @@
+@page "/allowance"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using System.ComponentModel.DataAnnotations
+@using System.Globalization
+@using System.Security.Claims
+@using Kwenta.Data
+@using Kwenta.Services
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Db
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject WeeklyAllowanceService AllowanceService
+@inject TransferService TransferService
+
+<PageTitle>Weekly Allowance</PageTitle>
+
+<div class="app-page">
+    <header class="page-header">
+        <div>
+            <h1>Weekly Allowance</h1>
+            <p class="page-subtitle">Track this week's allowance separately from your total account balances.</p>
+        </div>
+    </header>
+
+    @if (!string.IsNullOrWhiteSpace(statusError))
+    {
+        <p class="status-message status-error" role="alert">@statusError</p>
+    }
+
+    @if (activeProgress is null && closedProgress is not null && closedProgress.Remaining > 0)
+    {
+        <EditForm Model="leftoverTransfer" OnValidSubmit="MoveLeftover" FormName="MoveAllowanceLeftover" class="surface-card form-card">
+            <DataAnnotationsValidator /><ValidationSummary />
+            <h2 class="section-heading">Move leftover to savings</h2>
+            <p>@FormatPeso(closedProgress.Remaining) remains from the closed allowance. Choose where the physical money currently is and where to move it.</p>
+            <div class="form-grid">
+                <div class="form-field"><label>From account</label><InputSelect @bind-Value="leftoverTransfer.FromAccountId"><option value="">Select source</option>@foreach(var account in accounts){<option value="@account.Id">@account.Name</option>}</InputSelect></div>
+                <div class="form-field"><label>Destination account</label><InputSelect @bind-Value="leftoverTransfer.ToAccountId"><option value="">Select destination</option>@foreach(var account in accounts){<option value="@account.Id">@account.Name</option>}</InputSelect></div>
+                <div class="form-field"><label>Amount</label><InputNumber @bind-Value="leftoverTransfer.Amount" step="0.01" /></div>
+                <div class="form-field form-field-full"><label>Description (optional)</label><InputText @bind-Value="leftoverTransfer.Description" /></div>
+            </div>
+            <div class="form-actions"><button type="submit" class="app-button app-button-primary" disabled="@isMovingLeftover">@(isMovingLeftover ? "Moving…" : "Transfer Leftover")</button></div>
+            <p class="muted-text">This creates a normal account transfer. It does not change the closed allowance calculation.</p>
+        </EditForm>
+    }
+    @if (!string.IsNullOrWhiteSpace(statusSuccess))
+    {
+        <p class="status-message status-success" role="status">@statusSuccess</p>
+    }
+
+    @if (activeProgress is null)
+    {
+        <EditForm Model="input" OnValidSubmit="StartAllowance" FormName="StartWeeklyAllowance" class="surface-card form-card">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+            <h2 class="section-heading">Start weekly allowance</h2>
+
+            <div class="form-grid">
+                <div class="form-field">
+                    <label for="allowance-amount">Amount received</label>
+                    <InputNumber id="allowance-amount" @bind-Value="input.AmountReceived" step="0.01" />
+                    <ValidationMessage For="@(() => input.AmountReceived)" />
+                </div>
+                <div class="form-field">
+                    <label for="allowance-start">Start date</label>
+                    <InputDate id="allowance-start" @bind-Value="input.StartDate" />
+                    <ValidationMessage For="@(() => input.StartDate)" />
+                </div>
+            </div>
+
+            <div class="section-bar"><h2>Distribute across accounts</h2></div>
+            @foreach (var allocation in input.Allocations)
+            {
+                <div class="form-grid" @key="allocation.Key">
+                    <div class="form-field">
+                        <label>Account</label>
+                        <InputSelect @bind-Value="allocation.AccountId">
+                            <option value="">Select an account</option>
+                            @foreach (var account in accounts)
+                            {
+                                <option value="@account.Id">@account.Name</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="form-field">
+                        <label>Allocation amount</label>
+                        <InputNumber @bind-Value="allocation.Amount" step="0.01" />
+                    </div>
+                    @if (input.Allocations.Count > 1)
+                    {
+                        <div class="form-actions">
+                            <button type="button" class="app-button app-button-secondary" @onclick="() => RemoveAllocation(allocation)">Remove</button>
+                        </div>
+                    }
+                </div>
+            }
+
+            <div class="form-actions">
+                <button type="button" class="app-button app-button-secondary" @onclick="AddAllocation">Add account</button>
+            </div>
+            <div class="expense-draft-notice">
+                <p><strong>Total allocated:</strong> @FormatPeso(TotalAllocated)</p>
+                <p><strong>Remaining to allocate:</strong> @FormatPeso((input.AmountReceived ?? 0) - TotalAllocated)</p>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="app-button app-button-primary" disabled="@(isSaving || accounts.Count == 0)">
+                    @(isSaving ? "Starting…" : "Start Weekly Allowance")
+                </button>
+            </div>
+            <p class="muted-text">Starting creates real Income transactions only after the complete distribution passes validation.</p>
+        </EditForm>
+    }
+    else
+    {
+        <section class="surface-card detail-card">
+            <div class="detail-card-header">
+                <div>
+                    <h2>Active allowance</h2>
+                    <p class="detail-meta">@FormatDate(activeProgress.Allowance.StartDate) – @FormatDate(activeProgress.Allowance.EndDate)</p>
+                </div>
+                <span class="badge-soft badge-success">Active</span>
+            </div>
+            <p><strong>Received:</strong> @FormatPeso(activeProgress.Allowance.AmountReceived)</p>
+            <p><strong>Spent:</strong> @FormatPeso(activeProgress.AmountSpent)</p>
+            <p><strong>Remaining:</strong> <span class="@(activeProgress.Remaining < 0 ? "money-negative" : "money-value")">@FormatPeso(activeProgress.Remaining)</span></p>
+        </section>
+
+        <section class="content-section">
+            <div class="section-bar"><h2>Allocation breakdown</h2></div>
+            <div class="surface-card data-table-wrap">
+                <table class="data-table">
+                    <thead><tr><th>Account</th><th>Allocated Income</th></tr></thead>
+                    <tbody>
+                        @foreach (var allocation in activeProgress.Allowance.Allocations.OrderBy(item => item.FinancialAccount.Name))
+                        {
+                            <tr><td data-label="Account">@allocation.FinancialAccount.Name</td><td data-label="Allocated Income" class="money-value">@FormatPeso(allocation.Amount)</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="content-section">
+            <div class="section-bar"><h2>Recent allowance expenses</h2></div>
+            @if (activeProgress.RecentExpenses.Count == 0)
+            {
+                <div class="empty-state">No expenses have been counted against this allowance yet.</div>
+            }
+            else
+            {
+                <div class="surface-card data-table-wrap">
+                    <table class="data-table">
+                        <thead><tr><th>Amount</th><th>Merchant</th><th>Category</th><th>Account</th><th>Date</th></tr></thead>
+                        <tbody>
+                            @foreach (var expense in activeProgress.RecentExpenses)
+                            {
+                                <tr>
+                                    <td data-label="Amount" class="money-value money-negative">@FormatPeso(expense.Amount)</td>
+                                    <td data-label="Merchant">@expense.Merchant</td>
+                                    <td data-label="Category">@expense.Category.Name</td>
+                                    <td data-label="Account">@expense.FinancialAccount.Name</td>
+                                    <td data-label="Date">@FormatDate(expense.Date)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+
+        <section class="surface-card form-card">
+            <h2 class="section-heading">End week</h2>
+            <p>Closing preserves the allowance, allocations, Income, and linked expenses. Leftover money is not transferred automatically.</p>
+            @if (!showCloseConfirmation)
+            {
+                <button type="button" class="app-button app-button-secondary" @onclick="() => showCloseConfirmation = true">End this week</button>
+            }
+            else
+            {
+                <p><strong>Confirm close?</strong> @FormatPeso(activeProgress.Remaining) will remain in your accounts. No transfer will be created.</p>
+                <div class="form-actions">
+                    <button type="button" class="app-button app-button-danger" @onclick="CloseAllowance">Confirm End Week</button>
+                    <button type="button" class="app-button app-button-secondary" @onclick="() => showCloseConfirmation = false">Cancel</button>
+                </div>
+            }
+        </section>
+    }
+</div>
+
+@code {
+    private AllowanceInput input = NewInput();
+    private List<FinancialAccount> accounts = [];
+    private WeeklyAllowanceProgress? activeProgress;
+    private WeeklyAllowanceProgress? closedProgress;
+    private LeftoverTransferInput leftoverTransfer = new();
+    private string? statusError;
+    private string? statusSuccess;
+    private bool isSaving;
+    private bool showCloseConfirmation;
+    private bool isMovingLeftover;
+    private decimal TotalAllocated => input.Allocations.Sum(item => item.Amount ?? 0);
+
+    protected override async Task OnInitializedAsync() => await LoadPage();
+
+    private async Task LoadPage()
+    {
+        var userId = await GetUserId();
+        if (userId is null) return;
+        accounts = await Db.FinancialAccounts.AsNoTracking()
+            .Where(account => account.UserId == userId && !account.IsArchived)
+            .OrderBy(account => account.Name).ToListAsync();
+        activeProgress = await AllowanceService.GetActiveProgressAsync(userId);
+        closedProgress = activeProgress is null
+            ? await AllowanceService.GetLatestClosedProgressAsync(userId)
+            : null;
+        if (closedProgress is not null && leftoverTransfer.Amount is null)
+            leftoverTransfer.Amount = closedProgress.Remaining;
+    }
+
+    private void AddAllocation() => input.Allocations.Add(new AllocationInput());
+    private void RemoveAllocation(AllocationInput allocation) => input.Allocations.Remove(allocation);
+
+    private async Task StartAllowance()
+    {
+        if (isSaving) return;
+        statusError = null;
+        statusSuccess = null;
+        if (input.Allocations.Any(item => item.AccountId is null || item.Amount is null))
+        {
+            statusError = "Complete every account allocation.";
+            return;
+        }
+
+        isSaving = true;
+        try
+        {
+            var userId = await GetUserId();
+            if (userId is null) { statusError = "Please log in again."; return; }
+            var result = await AllowanceService.CreateAsync(userId, input.AmountReceived!.Value,
+                input.StartDate!.Value,
+                input.Allocations.Select(item => new AllowanceAllocationRequest(item.AccountId!.Value, item.Amount!.Value)).ToList());
+            if (!result.IsSuccess) { statusError = result.Error; return; }
+            input = NewInput();
+            statusSuccess = "Weekly allowance started. The distribution was recorded as Income in your selected accounts.";
+            await LoadPage();
+        }
+        finally { isSaving = false; }
+    }
+
+    private async Task CloseAllowance()
+    {
+        statusError = null;
+        var userId = await GetUserId();
+        if (userId is null) { statusError = "Please log in again."; return; }
+        var remaining = activeProgress?.Remaining ?? 0;
+        var result = await AllowanceService.CloseActiveAsync(userId);
+        if (!result.IsSuccess) { statusError = result.Error; return; }
+        activeProgress = null;
+        showCloseConfirmation = false;
+        statusSuccess = $"Week closed. {FormatPeso(remaining)} remains from this allowance. No money was transferred.";
+        await LoadPage();
+    }
+
+    private async Task MoveLeftover()
+    {
+        if (isMovingLeftover) return;
+        statusError = null;
+        isMovingLeftover = true;
+        try
+        {
+            var userId = await GetUserId();
+            if (userId is null) { statusError = "Please log in again."; return; }
+            var result = await TransferService.CreateAsync(userId, leftoverTransfer.FromAccountId!.Value,
+                leftoverTransfer.ToAccountId!.Value, leftoverTransfer.Amount!.Value,
+                DateOnly.FromDateTime(DateTime.Today), leftoverTransfer.Description);
+            if (!result.IsSuccess) { statusError = result.Error; return; }
+            statusSuccess = $"Transferred {FormatPeso(leftoverTransfer.Amount.Value)} from {result.FromAccountName} to {result.ToAccountName}.";
+            leftoverTransfer = new();
+            await LoadPage();
+        }
+        finally { isMovingLeftover = false; }
+    }
+
+    private async Task<string?> GetUserId()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return state.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+    }
+
+    private static AllowanceInput NewInput() => new() { StartDate = DateOnly.FromDateTime(DateTime.Today), Allocations = [new()] };
+    private static string FormatDate(DateOnly date) => date.ToString("MMM d, yyyy", CultureInfo.GetCultureInfo("en-PH"));
+    private static string FormatPeso(decimal amount)
+    {
+        var value = decimal.Abs(amount).ToString("N2", CultureInfo.GetCultureInfo("en-PH"));
+        return amount < 0 ? $"-₱{value}" : $"₱{value}";
+    }
+
+    private sealed class AllowanceInput : IValidatableObject
+    {
+        [Required, Range(typeof(decimal), "0.01", "999999999999.99")]
+        public decimal? AmountReceived { get; set; }
+        [Required] public DateOnly? StartDate { get; set; }
+        public List<AllocationInput> Allocations { get; set; } = [];
+        public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+        {
+            if (AmountReceived is decimal amount && decimal.Round(amount, 2) != amount)
+                yield return new("Amount received can have at most two decimal places.", [nameof(AmountReceived)]);
+        }
+    }
+
+    private sealed class AllocationInput
+    {
+        public Guid Key { get; } = Guid.NewGuid();
+        public int? AccountId { get; set; }
+        public decimal? Amount { get; set; }
+    }
+
+    private sealed class LeftoverTransferInput : IValidatableObject
+    {
+        [Required] public int? FromAccountId { get; set; }
+        [Required] public int? ToAccountId { get; set; }
+        [Required, Range(typeof(decimal), "0.01", "999999999999.99")] public decimal? Amount { get; set; }
+        public string? Description { get; set; } = "Move closed weekly allowance leftover";
+        public IEnumerable<ValidationResult> Validate(ValidationContext context)
+        {
+            if (FromAccountId is not null && FromAccountId == ToAccountId) yield return new("Choose two different accounts.", [nameof(ToAccountId)]);
+            if (Amount is decimal amount && decimal.Round(amount, 2) != amount) yield return new("Amount can have at most two decimal places.", [nameof(Amount)]);
+        }
+    }
+}

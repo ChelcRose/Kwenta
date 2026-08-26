@@ -3,6 +3,7 @@ using System;
 using Kwenta.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Kwenta.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260826063951_AddWeeklyAllowances")]
+    partial class AddWeeklyAllowances
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.11");
@@ -195,13 +198,6 @@ namespace Kwenta.Migrations
                             IsDefault = true,
                             Name = "Gift",
                             Type = 2
-                        },
-                        new
-                        {
-                            Id = 9,
-                            IsDefault = true,
-                            Name = "Allowance",
-                            Type = 2
                         });
                 });
 
@@ -311,42 +307,6 @@ namespace Kwenta.Migrations
                     b.HasIndex("WeeklyAllowanceId");
 
                     b.ToTable("Transactions");
-                });
-
-            modelBuilder.Entity("Kwenta.Data.Transfer", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateOnly>("Date")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("FromAccountId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("ToAccountId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("FromAccountId");
-
-                    b.HasIndex("ToAccountId");
-
-                    b.HasIndex("UserId", "Date");
-
-                    b.ToTable("Transfers");
                 });
 
             modelBuilder.Entity("Kwenta.Data.WeeklyAllowance", b =>
@@ -590,25 +550,6 @@ namespace Kwenta.Migrations
                     b.Navigation("WeeklyAllowance");
                 });
 
-            modelBuilder.Entity("Kwenta.Data.Transfer", b =>
-                {
-                    b.HasOne("Kwenta.Data.FinancialAccount", "FromAccount")
-                        .WithMany("TransfersOut")
-                        .HasForeignKey("FromAccountId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Kwenta.Data.FinancialAccount", "ToAccount")
-                        .WithMany("TransfersIn")
-                        .HasForeignKey("ToAccountId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("FromAccount");
-
-                    b.Navigation("ToAccount");
-                });
-
             modelBuilder.Entity("Kwenta.Data.WeeklyAllowanceAllocation", b =>
                 {
                     b.HasOne("Kwenta.Data.FinancialAccount", "FinancialAccount")
@@ -740,10 +681,6 @@ namespace Kwenta.Migrations
             modelBuilder.Entity("Kwenta.Data.FinancialAccount", b =>
                 {
                     b.Navigation("Transactions");
-
-                    b.Navigation("TransfersIn");
-
-                    b.Navigation("TransfersOut");
 
                     b.Navigation("WeeklyAllowanceAllocations");
                 });

@@ -208,6 +208,13 @@
             })
             .ToListAsync();
 
+        var transfers = await Db.Transfers.AsNoTracking()
+            .Where(transfer => transfer.UserId == userId &&
+                transfer.FromAccount.UserId == userId && transfer.ToAccount.UserId == userId &&
+                (accountIds.Contains(transfer.FromAccountId) || accountIds.Contains(transfer.ToAccountId)))
+            .Select(transfer => new { transfer.FromAccountId, transfer.ToAccountId, transfer.Amount })
+            .ToListAsync();
+
         accountBalances = accounts
             .Select(account =>
             {
@@ -227,7 +234,9 @@
                     FinancialCalculations.AccountBalance(
                         account.StartingBalance,
                         income,
-                        expenses));
+                        expenses,
+                        transfers.Where(transfer => transfer.ToAccountId == account.Id).Sum(transfer => transfer.Amount),
+                        transfers.Where(transfer => transfer.FromAccountId == account.Id).Sum(transfer => transfer.Amount)));
             })
             .ToList();
 

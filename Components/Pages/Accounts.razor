@@ -151,6 +151,13 @@ else
             })
             .ToListAsync();
 
+        var transfers = await Db.Transfers.AsNoTracking()
+            .Where(transfer => transfer.UserId == userId &&
+                transfer.FromAccount.UserId == userId && transfer.ToAccount.UserId == userId &&
+                (accountIds.Contains(transfer.FromAccountId) || accountIds.Contains(transfer.ToAccountId)))
+            .Select(transfer => new { transfer.FromAccountId, transfer.ToAccountId, transfer.Amount })
+            .ToListAsync();
+
         accounts = userAccounts
             .Select(userAccount => new AccountBalance
             {
@@ -166,7 +173,11 @@ else
                         .Where(transaction =>
                             transaction.AccountId == userAccount.Id &&
                             transaction.Type == TransactionType.Expense)
-                        .Sum(transaction => transaction.Amount))
+                        .Sum(transaction => transaction.Amount),
+                    transfers.Where(transfer => transfer.ToAccountId == userAccount.Id)
+                        .Sum(transfer => transfer.Amount),
+                    transfers.Where(transfer => transfer.FromAccountId == userAccount.Id)
+                        .Sum(transfer => transfer.Amount))
             })
             .ToList();
     }

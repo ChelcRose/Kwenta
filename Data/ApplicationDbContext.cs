@@ -22,6 +22,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<Transfer> Transfers { get; set; }
 
+    public DbSet<ChatConversation> ChatConversations { get; set; }
+
+    public DbSet<ChatMessage> ChatMessages { get; set; }
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -46,6 +50,25 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .WithMany(account => account.Transactions)
             .HasForeignKey(transaction => transaction.AccountId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        builder.Entity<ChatConversation>(conversation =>
+        {
+            conversation.Property(item => item.Title).HasMaxLength(60);
+            conversation.HasOne<ApplicationUser>()
+                .WithMany()
+                .HasForeignKey(item => item.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            conversation.HasIndex(item => new { item.UserId, item.UpdatedAt });
+        });
+
+        builder.Entity<ChatMessage>(message =>
+        {
+            message.HasOne(item => item.ChatConversation)
+                .WithMany(conversation => conversation.Messages)
+                .HasForeignKey(item => item.ChatConversationId)
+                .OnDelete(DeleteBehavior.Cascade);
+            message.HasIndex(item => new { item.ChatConversationId, item.CreatedAt });
+        });
 
         builder.Entity<Transfer>()
             .HasOne(transfer => transfer.FromAccount)

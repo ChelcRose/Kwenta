@@ -32,7 +32,56 @@
         </div>
     </header>
 
-    <section class="surface-card chat-card" aria-label="Financial chat">
+    <div class="chat-workspace">
+        <aside class="surface-card chat-sidebar" aria-label="Chat conversations">
+            <button type="button" class="new-chat-button" @onclick="StartNewChat" disabled="@isLoading">
+                <span aria-hidden="true">+</span>
+                New Chat
+            </button>
+
+            <h2>Recent conversations</h2>
+            @if (conversations.Count == 0)
+            {
+                <p class="chat-list-empty">No chats yet. Start a new conversation with Kwenta.</p>
+            }
+            else
+            {
+                <div class="chat-list">
+                    @foreach (var conversation in conversations)
+                    {
+                        <div class="chat-list-item @(currentConversationId == conversation.Id ? "chat-list-item-active" : null)" @key="conversation.Id">
+                            <button type="button"
+                                    class="chat-list-open"
+                                    @onclick="() => OpenConversation(conversation.Id)"
+                                    disabled="@isLoading"
+                                    aria-current="@(currentConversationId == conversation.Id ? "true" : null)">
+                                <span>@conversation.Title</span>
+                                <time datetime="@conversation.UpdatedAt.ToString("O")">@conversation.UpdatedAt.ToLocalTime().ToString("MMM d, h:mm tt")</time>
+                            </button>
+                            <button type="button"
+                                    class="chat-list-delete"
+                                    title="Delete conversation"
+                                    aria-label="Delete @conversation.Title"
+                                    @onclick="() => pendingDeleteConversationId = conversation.Id"
+                                    disabled="@isLoading">×</button>
+
+                            @if (pendingDeleteConversationId == conversation.Id)
+                            {
+                                <div class="chat-delete-confirmation" role="alert">
+                                    <span>Delete this chat?</span>
+                                    <div>
+                                        <button type="button" @onclick="() => DeleteConversation(conversation.Id)">Delete</button>
+                                        <button type="button" @onclick="() => pendingDeleteConversationId = null">Cancel</button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </aside>
+
+        <section class="surface-card chat-card" aria-label="Financial chat">
         <div class="chat-conversation" aria-live="polite" aria-busy="@isLoading">
             @if (messages.Count == 0)
             {
@@ -134,9 +183,9 @@
                     @if (activeExpenseAllowance is not null)
                     {
                         <div class="form-field form-field-full">
-                            <label>
-                                <InputCheckbox @bind-Value="expenseConfirmation.CountAgainstAllowance" />
-                                Count this against this week's allowance
+                            <label class="allowance-checkbox-label">
+                                <InputCheckbox class="allowance-checkbox" @bind-Value="expenseConfirmation.CountAgainstAllowance" />
+                                <span>Count this against this week's allowance</span>
                             </label>
                         </div>
                     }
@@ -279,16 +328,21 @@
         <EditForm Model="input" OnValidSubmit="SendMessage" FormName="FinancialChat" class="chat-form">
             <DataAnnotationsValidator />
             <label for="chat-message" class="visually-hidden">Ask a financial question</label>
-            <div class="chat-input-wrap">
+            <div class="chat-composer">
                 <InputText id="chat-message"
-                           class="form-control"
+                           class="chat-composer-input"
                            @bind-Value="input.Message"
-                           placeholder="How much did I spend this month?"
+                           placeholder="Ask Kwenta about your money..."
                            autocomplete="off"
                            disabled="@isLoading" />
-                <ValidationMessage For="() => input.Message" class="chat-validation" />
+                <button type="submit" class="chat-send-button" disabled="@isLoading">
+                    <span>Send</span>
+                    <svg aria-hidden="true" viewBox="0 0 20 20" focusable="false">
+                        <path d="M3 10h13M11 5l5 5-5 5" />
+                    </svg>
+                </button>
             </div>
-            <button type="submit" class="app-button app-button-primary" disabled="@isLoading">Send</button>
+            <ValidationMessage For="() => input.Message" class="chat-validation" />
         </EditForm>
 
         <div class="chat-prompt-help">
@@ -335,7 +389,8 @@
                 </div>
             }
         </div>
-    </section>
+        </section>
+    </div>
 </div>
 
 @code {
@@ -359,6 +414,7 @@
         new("question-group-planning", "Plan and decide",
         [
             "Am I likely to go over budget this month?",
+            "How much do I have left for my allowance?",
             "How have my savings changed from last month?",
             "Can I buy ₱180 milk tea?",
             "Help me save for ₱11,000 AirPods."
@@ -374,6 +430,9 @@
 
     private static readonly CultureInfo PhilippineCulture = CultureInfo.GetCultureInfo("en-PH");
     private readonly List<ChatMessage> messages = [];
+    private List<ConversationListItem> conversations = [];
+    private int? currentConversationId;
+    private int? pendingDeleteConversationId;
     private ChatInput input = new();
     private ExpenseConfirmationInput? expenseConfirmation;
     private List<FinancialAccount> expenseAccounts = [];
@@ -396,6 +455,279 @@
     private string? transferConfirmationError;
     private bool isSavingTransfer;
     private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var userId = await GetCurrentUserId();
+        if (userId is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await LoadConversationList(userId);
+            if (conversations.Count > 0)
+            {
+                await OpenConversation(conversations[0].Id);
+            }
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to load the current user's chat conversations.");
+            errorMessage = "Kwenta couldn't load your chat history. Please try again.";
+        }
+    }
+
+    private async Task LoadConversationList(string userId)
+    {
+        conversations = await Db.ChatConversations.AsNoTracking()
+            .Where(conversation => conversation.UserId == userId)
+            .OrderByDescending(conversation => conversation.UpdatedAt)
+            .ThenByDescending(conversation => conversation.Id)
+            .Select(conversation => new ConversationListItem(
+                conversation.Id,
+                conversation.Title,
+                conversation.UpdatedAt))
+            .ToListAsync();
+    }
+
+    private async Task OpenConversation(int conversationId)
+    {
+        if (isLoading)
+        {
+            return;
+        }
+
+        var userId = await GetCurrentUserId();
+        if (userId is null)
+        {
+            errorMessage = "Please log in again to open this conversation.";
+            return;
+        }
+
+        try
+        {
+            var conversation = await Db.ChatConversations.AsNoTracking()
+                .Where(item => item.Id == conversationId && item.UserId == userId)
+                .Select(item => new
+                {
+                    item.Id,
+                    Messages = item.Messages
+                        .OrderBy(message => message.CreatedAt)
+                        .ThenBy(message => message.Id)
+                        .Select(message => new
+                        {
+                            message.Role,
+                            message.Content
+                        })
+                        .ToList()
+                })
+                .SingleOrDefaultAsync();
+
+            if (conversation is null)
+            {
+                errorMessage = "That conversation could not be found.";
+                return;
+            }
+
+            ResetConversationUi();
+            currentConversationId = conversation.Id;
+            messages.AddRange(conversation.Messages.Select(message =>
+                new ChatMessage(message.Role == ChatMessageRole.User, message.Content)));
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to load chat conversation {ConversationId} for the current user.", conversationId);
+            errorMessage = "Kwenta couldn't load that conversation. Please try again.";
+        }
+    }
+
+    private void StartNewChat()
+    {
+        ResetConversationUi();
+        currentConversationId = null;
+    }
+
+    private void ResetConversationUi()
+    {
+        messages.Clear();
+        input = new();
+        pendingDeleteConversationId = null;
+        errorMessage = null;
+        expenseSaveSuccess = null;
+        showAllQuestions = false;
+        showCloseAllowanceConfirmation = false;
+        DiscardExpenseDraft();
+        DiscardAllowanceDraft();
+        DiscardTransferDraft();
+    }
+
+    private async Task DeleteConversation(int conversationId)
+    {
+        var userId = await GetCurrentUserId();
+        if (userId is null)
+        {
+            errorMessage = "Please log in again to delete this conversation.";
+            return;
+        }
+
+        try
+        {
+            var conversation = await Db.ChatConversations.SingleOrDefaultAsync(item =>
+                item.Id == conversationId && item.UserId == userId);
+            if (conversation is null)
+            {
+                errorMessage = "That conversation could not be found.";
+                return;
+            }
+
+            Db.ChatConversations.Remove(conversation);
+            await Db.SaveChangesAsync();
+
+            if (currentConversationId == conversationId)
+            {
+                StartNewChat();
+            }
+
+            pendingDeleteConversationId = null;
+            await LoadConversationList(userId);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to delete chat conversation {ConversationId} for the current user.", conversationId);
+            ResetFailedChatPersistenceEntries();
+            errorMessage = "Kwenta couldn't delete that conversation. Please try again.";
+        }
+    }
+
+    private async Task<bool> PersistUserMessage(string userId, string content)
+    {
+        try
+        {
+            var now = DateTime.UtcNow;
+            ChatConversation? conversation = null;
+            if (currentConversationId is int conversationId)
+            {
+                conversation = await Db.ChatConversations.SingleOrDefaultAsync(item =>
+                    item.Id == conversationId && item.UserId == userId);
+            }
+
+            if (conversation is null)
+            {
+                conversation = new ChatConversation
+                {
+                    UserId = userId,
+                    Title = CreateConversationTitle(content),
+                    CreatedAt = now,
+                    UpdatedAt = now
+                };
+                Db.ChatConversations.Add(conversation);
+            }
+
+            conversation.UpdatedAt = now;
+            conversation.Messages.Add(new Kwenta.Data.ChatMessage
+            {
+                Role = ChatMessageRole.User,
+                Content = content,
+                CreatedAt = now
+            });
+            await Db.SaveChangesAsync();
+
+            currentConversationId = conversation.Id;
+            await LoadConversationList(userId);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to persist the current user's chat message.");
+            ResetFailedChatPersistenceEntries();
+            errorMessage = "Kwenta couldn't save your chat message. Please try again.";
+            return false;
+        }
+    }
+
+    private async Task PersistNewAssistantMessages(string userId, int startIndex)
+    {
+        var visibleMessages = messages.Skip(startIndex)
+            .Where(message => !message.IsUser)
+            .Select(message => message.Text)
+            .ToList();
+        if (visibleMessages.Count == 0)
+        {
+            return;
+        }
+
+        await PersistAssistantMessages(userId, visibleMessages);
+    }
+
+    private async Task PersistAssistantMessages(string userId, IReadOnlyList<string> visibleMessages)
+    {
+        if (currentConversationId is not int conversationId || visibleMessages.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var conversation = await Db.ChatConversations.SingleOrDefaultAsync(item =>
+                item.Id == conversationId && item.UserId == userId);
+            if (conversation is null)
+            {
+                errorMessage = "Kwenta couldn't save the conversation. Please try again.";
+                return;
+            }
+
+            var now = DateTime.UtcNow;
+            for (var index = 0; index < visibleMessages.Count; index++)
+            {
+                conversation.Messages.Add(new Kwenta.Data.ChatMessage
+                {
+                    Role = ChatMessageRole.Assistant,
+                    Content = visibleMessages[index],
+                    CreatedAt = now.AddTicks(index)
+                });
+            }
+
+            conversation.UpdatedAt = now.AddTicks(visibleMessages.Count - 1);
+            await Db.SaveChangesAsync();
+            await LoadConversationList(userId);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Unable to persist visible assistant chat messages.");
+            ResetFailedChatPersistenceEntries();
+            errorMessage = "Kwenta answered, but couldn't save the conversation. Please try again.";
+        }
+    }
+
+    private async Task AddAndPersistAssistantMessage(string userId, string content)
+    {
+        messages.Add(new ChatMessage(false, content));
+        await PersistAssistantMessages(userId, [content]);
+    }
+
+    private void ResetFailedChatPersistenceEntries()
+    {
+        foreach (var entry in Db.ChangeTracker.Entries()
+                     .Where(entry => entry.Entity is ChatConversation or Kwenta.Data.ChatMessage)
+                     .ToList())
+        {
+            entry.State = entry.State == EntityState.Added
+                ? EntityState.Detached
+                : EntityState.Unchanged;
+        }
+    }
+
+    private static string CreateConversationTitle(string firstMessage)
+    {
+        const int maximumTextElements = 60;
+        var trimmed = firstMessage.Trim();
+        var info = new StringInfo(trimmed);
+        return info.LengthInTextElements <= maximumTextElements
+            ? trimmed
+            : info.SubstringByTextElements(0, maximumTextElements - 1).TrimEnd() + "…";
+    }
 
     private void UseSuggestion(string suggestion)
     {
@@ -448,9 +780,16 @@
             return;
         }
 
+        isLoading = true;
+        if (!await PersistUserMessage(userId, questionText))
+        {
+            isLoading = false;
+            return;
+        }
+
         messages.Add(new ChatMessage(true, questionText));
         input = new();
-        isLoading = true;
+        var assistantMessageStartIndex = messages.Count;
 
         try
         {
@@ -491,6 +830,12 @@
                 return;
             }
 
+            if (route.Question == FinancialChatQuestion.AllowanceRemaining)
+            {
+                await AnswerAllowanceRemainingQuestion(userId);
+                return;
+            }
+
             if (IsBudgetQuestion(route.Question))
             {
                 await AnswerBudgetQuestion(userId, today, questionText, route);
@@ -518,6 +863,7 @@
         }
         finally
         {
+            await PersistNewAssistantMessages(userId, assistantMessageStartIndex);
             isLoading = false;
         }
     }
@@ -566,6 +912,21 @@
             });
 
         AddAiOrFallback(aiResult, deterministicResponse);
+    }
+
+    private async Task AnswerAllowanceRemainingQuestion(string userId)
+    {
+        var progress = await AllowanceService.GetActiveProgressAsync(userId);
+        if (progress is null)
+        {
+            messages.Add(new ChatMessage(false, "You don't have an active weekly allowance right now."));
+            return;
+        }
+
+        messages.Add(new ChatMessage(
+            false,
+            $"You have {FormatPeso(progress.Remaining)} left from this week's allowance. " +
+            $"You received {FormatPeso(progress.Allowance.AmountReceived)} and have spent {FormatPeso(progress.AmountSpent)} against it."));
     }
 
     private async Task AnswerBudgetQuestion(
@@ -871,11 +1232,11 @@
             if (!result.IsSuccess) { transferConfirmationError = result.Error; return; }
             var amount = transferConfirmation.Amount.Value;
             DiscardTransferDraft();
-            messages.Add(new ChatMessage(false,
+            await AddAndPersistAssistantMessage(userId,
                 $"Transferred {FormatPeso(amount)} from {result.FromAccountName} to {result.ToAccountName}. " +
                 $"{result.FromAccountName} balance: {FormatPeso(result.FromBalance!.Value)}. " +
                 $"{result.ToAccountName} balance: {FormatPeso(result.ToBalance!.Value)}. " +
-                $"Total balance unchanged: {FormatPeso(result.TotalBalance!.Value)}."));
+                $"Total balance unchanged: {FormatPeso(result.TotalBalance!.Value)}.");
         }
         finally { isSavingTransfer = false; }
     }
@@ -911,8 +1272,8 @@
                     new AllowanceAllocationRequest(item.AccountId!.Value, item.Amount!.Value)).ToList());
             if (!result.IsSuccess) { allowanceConfirmationError = result.Error; return; }
             DiscardAllowanceDraft();
-            messages.Add(new ChatMessage(false,
-                "Weekly allowance confirmed. Its complete distribution was recorded as Income; no starting balances were changed."));
+            await AddAndPersistAssistantMessage(userId,
+                "Weekly allowance confirmed. Its complete distribution was recorded as Income; no starting balances were changed.");
         }
         finally { isSavingAllowance = false; }
     }
@@ -926,8 +1287,8 @@
         var result = await AllowanceService.CloseActiveAsync(userId);
         if (!result.IsSuccess) { errorMessage = result.Error; return; }
         showCloseAllowanceConfirmation = false;
-        messages.Add(new ChatMessage(false,
-            $"Week closed. {FormatPeso(progress.Remaining)} remains from this week's allowance. No money was transferred."));
+        await AddAndPersistAssistantMessage(userId,
+            $"Week closed. {FormatPeso(progress.Remaining)} remains from this week's allowance. No money was transferred.");
     }
 
     private void DiscardAllowanceDraft()
@@ -1035,7 +1396,7 @@
 
             DiscardExpenseDraft();
             expenseSaveSuccess = "Expense saved successfully. It now appears in transaction history and calculated balances.";
-            messages.Add(new ChatMessage(false, confirmationMessage));
+            await AddAndPersistAssistantMessage(userId, confirmationMessage);
         }
         catch (Exception exception)
         {
@@ -1109,6 +1470,8 @@
         $"₱{amount.ToString("N2", PhilippineCulture)}";
 
     private sealed record ChatMessage(bool IsUser, string Text);
+
+    private sealed record ConversationListItem(int Id, string Title, DateTime UpdatedAt);
 
     private sealed record QuestionGroup(string Id, string Name, IReadOnlyList<string> Questions);
 

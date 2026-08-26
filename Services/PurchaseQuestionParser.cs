@@ -8,12 +8,12 @@ public static partial class PurchaseQuestionParser
     private const string AmountPattern = @"(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?";
 
     [GeneratedRegex(
-        @"^can\s+i\s+(?:buy|afford)\s+(?:₱|php\s*)(?<amount>" + AmountPattern + @")\s+(?<name>.+?)\s*[?.!]*$",
+        @"^can\s+i\s+(?:buy|afford)\s+(?:₱\s*|php\s*)?(?<amount>" + AmountPattern + @")(?:\s*(?:php|pesos?))?\s+(?<name>.+?)\s*[?.!]*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex AmountFirstPattern();
 
     [GeneratedRegex(
-        @"^can\s+i\s+(?:buy|afford)\s+(?<name>.+?)\s+for\s+(?:₱|php\s*)(?<amount>" + AmountPattern + @")\s*[?.!]*$",
+        @"^can\s+i\s+(?:buy|afford)\s+(?<name>.+?)\s+(?:for|at|worth)\s+(?:₱\s*|php\s*)?(?<amount>" + AmountPattern + @")(?:\s*(?:php|pesos?))?\s*[?.!]*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex AmountLastPattern();
 
@@ -32,6 +32,9 @@ public static partial class PurchaseQuestionParser
 
     [GeneratedRegex(@"(?:₱|php\s*)(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex CurrencyAmountPattern();
+
+    [GeneratedRegex(@"(?<![\p{L}\p{N}])(?:₱\s*|php\s*)?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:\s*(?:php|pesos?))?(?![\p{L}\p{N}])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex MonetaryAmountPattern();
 
     public static bool LooksLikePurchaseQuestion(string question) =>
         PurchaseIntentPattern().IsMatch(question.Trim());
@@ -57,7 +60,7 @@ public static partial class PurchaseQuestionParser
         purchase = null!;
         var input = question.Trim();
 
-        if (CurrencyAmountPattern().Matches(input).Count != 1)
+        if (MonetaryAmountPattern().Matches(input).Count != 1)
         {
             return false;
         }
@@ -88,7 +91,7 @@ public static partial class PurchaseQuestionParser
         var amountText = match.Groups["amount"].Value;
 
         if (name.Length == 0 ||
-            CurrencyAmountPattern().IsMatch(name) ||
+            MonetaryAmountPattern().IsMatch(name) ||
             !decimal.TryParse(
                 amountText,
                 NumberStyles.AllowDecimalPoint | NumberStyles.AllowThousands,

@@ -88,9 +88,9 @@
     @if (activeAllowance is not null)
     {
         <div class="form-field form-field-full">
-            <label>
-                <InputCheckbox @bind-Value="expense.CountAgainstAllowance" />
-                Count this against this week's allowance
+            <label class="allowance-checkbox-label">
+                <InputCheckbox class="allowance-checkbox" @bind-Value="expense.CountAgainstAllowance" />
+                <span>Count this against this week's allowance</span>
             </label>
             <span class="muted-text">@activeAllowance.StartDate.ToString("MMM d") – @activeAllowance.EndDate.ToString("MMM d")</span>
         </div>

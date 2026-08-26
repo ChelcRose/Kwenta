@@ -20,6 +20,7 @@ public enum FinancialChatQuestion
     SavingsComparison,
     PreviousMonthSpending,
     SpendingComparison,
+    AllowanceRemaining,
     PurchaseAffordability,
     PurchasePlan
 }
@@ -49,6 +50,12 @@ public static class FinancialChatQuestionRouter
         }
 
         var normalized = NormalizeQuestion(question);
+
+        if (IsAllowanceRemainingQuestion(normalized))
+        {
+            route = new(FinancialChatQuestion.AllowanceRemaining);
+            return true;
+        }
 
         route = normalized switch
         {
@@ -101,6 +108,13 @@ public static class FinancialChatQuestionRouter
         route = null!;
         return false;
     }
+
+    private static bool IsAllowanceRemainingQuestion(string normalized) =>
+        Regex.IsMatch(normalized, @"\ballowance\b", RegexOptions.CultureInvariant) &&
+        Regex.IsMatch(
+            normalized,
+            @"\b(?:left|remaining|remain|balance|available)\b",
+            RegexOptions.CultureInvariant);
 
     private static string NormalizeQuestion(string question)
     {

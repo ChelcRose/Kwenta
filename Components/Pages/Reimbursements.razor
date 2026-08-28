@@ -137,21 +137,35 @@
             .Where(account => account.UserId == userId && !account.IsArchived)
             .OrderBy(account => account.Name)
             .ToListAsync();
-        expenses = await Db.Transactions.AsNoTracking()
-            .Where(transaction => transaction.UserId == userId &&
+        var reimbursementTotals = Db.Reimbursements.AsNoTracking()
+            .Where(item => item.UserId == userId && item.ExpenseTransactionId != null)
+            .GroupBy(item => item.ExpenseTransactionId!.Value)
+            .Select(group => new
+            {
+                ExpenseTransactionId = group.Key,
+                Reimbursed = (decimal?)group.Sum(item => item.Amount)
+            });
+
+        expenses = await (
+            from transaction in Db.Transactions.AsNoTracking()
+            join total in reimbursementTotals
+                on transaction.Id equals total.ExpenseTransactionId into reimbursementGroup
+            from total in reimbursementGroup.DefaultIfEmpty()
+            let reimbursed = total.Reimbursed ?? 0m
+            let outstanding = transaction.Amount - reimbursed
+            where transaction.UserId == userId &&
                 transaction.FinancialAccount.UserId == userId &&
-                transaction.Type == TransactionType.Expense)
-            .Select(transaction => new ExpenseOption(
+                transaction.Type == TransactionType.Expense &&
+                outstanding > 0
+            orderby transaction.Date descending, transaction.Id descending
+            select new ExpenseOption(
                 transaction.Id,
                 transaction.Amount,
                 transaction.Date,
                 transaction.Merchant,
                 transaction.FinancialAccount,
                 transaction.WeeklyAllowanceId,
-                transaction.Amount - transaction.Reimbursements.Sum(item => item.Amount)))
-            .Where(expense => expense.Outstanding > 0)
-            .OrderByDescending(expense => expense.Date)
-            .ThenByDescending(expense => expense.Id)
+                outstanding))
             .ToListAsync();
         reimbursements = await Db.Reimbursements.AsNoTracking()
             .Include(item => item.ReceivingAccount)

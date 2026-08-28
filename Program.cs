@@ -37,7 +37,13 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
     .AddSignInManager()
     .AddDefaultTokenProviders();
 
-builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
+builder.Services.Configure<ResendOptions>(
+    builder.Configuration.GetSection(ResendOptions.SectionName));
+builder.Services.AddHttpClient<IEmailSender<ApplicationUser>, ResendEmailSender>(client =>
+{
+    client.BaseAddress = new Uri("https://api.resend.com/");
+    client.Timeout = TimeSpan.FromSeconds(15);
+});
 builder.Services.AddScoped<TransactionAnalysisService>();
 builder.Services.AddScoped<BudgetAnalysisService>();
 builder.Services.AddScoped<SavingsPerformanceAnalysisService>();

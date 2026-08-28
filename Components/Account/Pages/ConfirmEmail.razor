@@ -10,11 +10,45 @@
 
 <PageTitle>Confirm email</PageTitle>
 
-<h1>Confirm email</h1>
-<StatusMessage Message="@statusMessage" />
+<main class="auth-page">
+    <div class="auth-shell">
+        <header class="auth-header">
+            <a class="auth-brand" href="/" aria-label="Kwenta home">
+                <span class="auth-brand-mark" aria-hidden="true">K</span>
+                <span>Kwenta</span>
+            </a>
+            <h1>@(confirmationSucceeded ? "Email confirmed" : "Confirm your email")</h1>
+            <p>@(confirmationSucceeded ? "Your Kwenta account is ready." : "We couldn't complete your confirmation.")</p>
+        </header>
+
+        <section class="auth-card auth-confirmation-card" aria-live="polite">
+            @if (confirmationSucceeded)
+            {
+                <div class="auth-confirmation-icon auth-confirmation-success" aria-hidden="true">✓</div>
+                <h2>You're all set</h2>
+                <p>Thank you for confirming your email address. You can now log in to Kwenta.</p>
+                <div class="auth-confirmation-actions">
+                    <a class="auth-submit auth-action-link" href="Account/Login">Log in to Kwenta</a>
+                </div>
+            }
+            else
+            {
+                <div class="auth-confirmation-icon auth-confirmation-error" aria-hidden="true">!</div>
+                <h2>Confirmation link didn't work</h2>
+                <StatusMessage Message="@statusMessage" />
+                <p>The link may be invalid or expired. Request a new confirmation email and try again.</p>
+                <div class="auth-confirmation-actions">
+                    <a class="auth-submit auth-action-link" href="Account/ResendEmailConfirmation">Send a new link</a>
+                    <a href="Account/Login">Back to login</a>
+                </div>
+            }
+        </section>
+    </div>
+</main>
 
 @code {
     private string? statusMessage;
+    private bool confirmationSucceeded;
 
     [CascadingParameter]
     private HttpContext HttpContext { get; set; } = default!;
@@ -43,7 +77,8 @@
         {
             var code = Encoding.UTF8.GetString(WebEncoders.Base64UrlDecode(Code));
             var result = await UserManager.ConfirmEmailAsync(user, code);
-            statusMessage = result.Succeeded ? "Thank you for confirming your email." : "Error confirming your email.";
+            confirmationSucceeded = result.Succeeded;
+            statusMessage = result.Succeeded ? null : "Error: We couldn't confirm this email address.";
         }
     }
 }

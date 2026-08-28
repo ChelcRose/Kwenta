@@ -111,7 +111,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         builder.Entity<WeeklyAllowance>()
             .HasIndex(allowance => allowance.UserId)
             .IsUnique()
-            .HasFilter("\"IsActive\" = 1");
+            .HasFilter("\"IsActive\" IS TRUE");
 
         builder.Entity<WeeklyAllowanceAllocation>()
             .HasOne(allocation => allocation.WeeklyAllowance)

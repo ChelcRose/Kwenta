@@ -56,9 +56,18 @@
             <ValidationSummary />
             <h2 class="section-heading">Start weekly allowance</h2>
 
+            <div class="form-field form-field-full">
+                <label for="allowance-source">Funding source</label>
+                <InputSelect id="allowance-source" @bind-Value="input.UseExistingFunds">
+                    <option value="true">Allocate money already in my accounts</option>
+                    <option value="false">Record newly received allowance as income</option>
+                </InputSelect>
+                <p class="muted-text">Existing funds are only designated for this week. Your account balances and income totals do not change.</p>
+            </div>
+
             <div class="form-grid">
                 <div class="form-field">
-                    <label for="allowance-amount">Amount received</label>
+                    <label for="allowance-amount">@(input.UseExistingFunds ? "Weekly allowance amount" : "Amount received")</label>
                     <InputNumber id="allowance-amount" @bind-Value="input.AmountReceived" step="0.01" />
                     <ValidationMessage For="@(() => input.AmountReceived)" />
                 </div>
@@ -73,7 +82,7 @@
                 <div class="allowance-section-heading">
                     <div>
                         <h2>Distribute across accounts</h2>
-                        <p>Allocate the full allowance amount to one or more active accounts.</p>
+                        <p>Choose the active account or accounts that fund the full weekly allowance.</p>
                     </div>
                     <button type="button" class="app-button app-button-secondary" @onclick="AddAllocation">Add account</button>
                 </div>
@@ -116,7 +125,9 @@
                     @(isSaving ? "Starting…" : "Start Weekly Allowance")
                 </button>
             </div>
-            <p class="muted-text">Starting creates real Income transactions only after the complete distribution passes validation.</p>
+            <p class="muted-text">@(input.UseExistingFunds
+                ? "Starting designates existing balances only; it does not move or add money."
+                : "Starting records newly received money as Income after validation.")</p>
         </EditForm>
     }
     else
@@ -140,11 +151,11 @@
             <div class="section-bar"><h2>Allocation breakdown</h2></div>
             <div class="surface-card data-table-wrap">
                 <table class="data-table">
-                    <thead><tr><th>Account</th><th>Allocated Income</th></tr></thead>
+                    <thead><tr><th>Funding account</th><th>Allocated amount</th></tr></thead>
                     <tbody>
                         @foreach (var allocation in activeProgress.Allowance.Allocations.OrderBy(item => item.FinancialAccount.Name))
                         {
-                            <tr><td data-label="Account">@allocation.FinancialAccount.Name</td><td data-label="Allocated Income" class="money-value">@FormatPeso(allocation.Amount)</td></tr>
+                            <tr><td data-label="Funding account">@allocation.FinancialAccount.Name</td><td data-label="Allocated amount" class="money-value">@FormatPeso(allocation.Amount)</td></tr>
                         }
                     </tbody>
                 </table>
@@ -161,12 +172,14 @@
             {
                 <div class="surface-card data-table-wrap">
                     <table class="data-table">
-                        <thead><tr><th>Amount</th><th>Merchant</th><th>Category</th><th>Account</th><th>Date</th></tr></thead>
+                        <thead><tr><th>Original</th><th>Reimbursed</th><th>Net spent</th><th>Merchant</th><th>Category</th><th>Account</th><th>Date</th></tr></thead>
                         <tbody>
                             @foreach (var expense in activeProgress.RecentExpenses)
                             {
                                 <tr>
-                                    <td data-label="Amount" class="money-value money-negative">@FormatPeso(expense.Amount)</td>
+                                    <td data-label="Original" class="money-value money-negative">@FormatPeso(expense.Amount)</td>
+                                    <td data-label="Reimbursed" class="money-value">@FormatPeso(expense.Reimbursements.Sum(item => item.Amount))</td>
+                                    <td data-label="Net spent" class="money-value money-negative">@FormatPeso(FinancialCalculations.NetExpense(expense.Amount, expense.Reimbursements.Sum(item => item.Amount)))</td>
                                     <td data-label="Merchant">@expense.Merchant</td>
                                     <td data-label="Category">@expense.Category.Name</td>
                                     <td data-label="Account">@expense.FinancialAccount.Name</td>
@@ -199,7 +212,8 @@
 </div>
 
 @code {
-    private AllowanceInput input = NewInput();
+    [SupplyParameterFromForm(FormName = "StartWeeklyAllowance")]
+    private AllowanceInput input { get; set; } = default!;
     private List<FinancialAccount> accounts = [];
     private WeeklyAllowanceProgress? activeProgress;
     private WeeklyAllowanceProgress? closedProgress;
@@ -211,7 +225,11 @@
     private bool isMovingLeftover;
     private decimal TotalAllocated => input.Allocations.Sum(item => item.Amount ?? 0);
 
-    protected override async Task OnInitializedAsync() => await LoadPage();
+    protected override async Task OnInitializedAsync()
+    {
+        input ??= NewInput();
+        await LoadPage();
+    }
 
     private async Task LoadPage()
     {
@@ -247,12 +265,16 @@
         {
             var userId = await GetUserId();
             if (userId is null) { statusError = "Please log in again."; return; }
+            var useExistingFunds = input.UseExistingFunds;
             var result = await AllowanceService.CreateAsync(userId, input.AmountReceived!.Value,
                 input.StartDate!.Value,
-                input.Allocations.Select(item => new AllowanceAllocationRequest(item.AccountId!.Value, item.Amount!.Value)).ToList());
+                input.Allocations.Select(item => new AllowanceAllocationRequest(item.AccountId!.Value, item.Amount!.Value)).ToList(),
+                useExistingFunds);
             if (!result.IsSuccess) { statusError = result.Error; return; }
             input = NewInput();
-            statusSuccess = "Weekly allowance started. The distribution was recorded as Income in your selected accounts.";
+            statusSuccess = useExistingFunds
+                ? "Weekly allowance started using existing account funds. Account balances and income were unchanged."
+                : "Weekly allowance started. The newly received money was recorded as Income.";
             await LoadPage();
         }
         finally { isSaving = false; }
@@ -308,6 +330,7 @@
 
     private sealed class AllowanceInput : IValidatableObject
     {
+        public bool UseExistingFunds { get; set; } = true;
         [Required, Range(typeof(decimal), "0.01", "999999999999.99")]
         public decimal? AmountReceived { get; set; }
         [Required] public DateOnly? StartDate { get; set; }

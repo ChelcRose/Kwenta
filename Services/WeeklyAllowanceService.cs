@@ -3,13 +3,14 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Kwenta.Services;
 
-public sealed class WeeklyAllowanceService(ApplicationDbContext db)
+public sealed class WeeklyAllowanceService(ApplicationDbContext db, TransferService transferService)
 {
     public async Task<AllowanceOperationResult> CreateAsync(
         string userId,
         decimal amountReceived,
         DateOnly startDate,
         IReadOnlyList<AllowanceAllocationRequest> requestedAllocations,
+        bool useExistingFunds = false,
         CancellationToken cancellationToken = default)
     {
         if (amountReceived <= 0 || decimal.Round(amountReceived, 2) != amountReceived)
@@ -38,13 +39,27 @@ public sealed class WeeklyAllowanceService(ApplicationDbContext db)
             if (accounts.Count != accountIds.Count)
                 return AllowanceOperationResult.Failed("Every allocation must use one of your active financial accounts.");
 
-            var incomeCategoryId = await db.Categories
-                .Where(category => category.IsDefault && category.UserId == null &&
-                    category.Type == CategoryType.Income && category.Name == "Allowance")
-                .Select(category => (int?)category.Id)
-                .SingleOrDefaultAsync(cancellationToken);
-            if (incomeCategoryId is null)
-                return AllowanceOperationResult.Failed("The default Income category needed to record the allowance is unavailable.");
+            if (useExistingFunds)
+            {
+                var balances = await transferService.GetBalancesAsync(userId, accountIds, cancellationToken);
+                var insufficient = requestedAllocations.FirstOrDefault(item =>
+                    item.Amount > balances.GetValueOrDefault(item.AccountId));
+                if (insufficient is not null)
+                    return AllowanceOperationResult.Failed(
+                        $"{accounts[insufficient.AccountId].Name} has only ₱{balances.GetValueOrDefault(insufficient.AccountId):N2} available.");
+            }
+
+            int? incomeCategoryId = null;
+            if (!useExistingFunds)
+            {
+                incomeCategoryId = await db.Categories
+                    .Where(category => category.IsDefault && category.UserId == null &&
+                        category.Type == CategoryType.Income && category.Name == "Allowance")
+                    .Select(category => (int?)category.Id)
+                    .SingleOrDefaultAsync(cancellationToken);
+                if (incomeCategoryId is null)
+                    return AllowanceOperationResult.Failed("The default Income category needed to record the allowance is unavailable.");
+            }
 
             var allowance = new WeeklyAllowance
             {
@@ -62,17 +77,20 @@ public sealed class WeeklyAllowanceService(ApplicationDbContext db)
                     FinancialAccountId = requested.AccountId,
                     Amount = requested.Amount
                 });
-                db.Transactions.Add(new Transaction
+                if (!useExistingFunds)
                 {
-                    UserId = userId,
-                    AccountId = requested.AccountId,
-                    CategoryId = incomeCategoryId.Value,
-                    Type = TransactionType.Income,
-                    Amount = requested.Amount,
-                    Date = startDate,
-                    Merchant = "Weekly Allowance",
-                    Description = $"Weekly allowance allocation to {accounts[requested.AccountId].Name}."
-                });
+                    db.Transactions.Add(new Transaction
+                    {
+                        UserId = userId,
+                        AccountId = requested.AccountId,
+                        CategoryId = incomeCategoryId!.Value,
+                        Type = TransactionType.Income,
+                        Amount = requested.Amount,
+                        Date = startDate,
+                        Merchant = "Weekly Allowance",
+                        Description = $"Weekly allowance allocation to {accounts[requested.AccountId].Name}."
+                    });
+                }
             }
 
             db.WeeklyAllowances.Add(allowance);
@@ -122,6 +140,7 @@ public sealed class WeeklyAllowanceService(ApplicationDbContext db)
         var expenses = await db.Transactions.AsNoTracking()
             .Include(transaction => transaction.Category)
             .Include(transaction => transaction.FinancialAccount)
+            .Include(transaction => transaction.Reimbursements)
             .Where(transaction => transaction.WeeklyAllowanceId == allowance.Id &&
                 transaction.UserId == userId &&
                 transaction.FinancialAccount.UserId == userId &&
@@ -129,7 +148,12 @@ public sealed class WeeklyAllowanceService(ApplicationDbContext db)
             .OrderByDescending(transaction => transaction.Date)
             .ThenByDescending(transaction => transaction.Id)
             .ToListAsync(cancellationToken);
-        return new WeeklyAllowanceProgress(allowance, expenses.Sum(item => item.Amount), expenses.Take(10).ToList());
+        return new WeeklyAllowanceProgress(
+            allowance,
+            expenses.Sum(item => FinancialCalculations.NetExpense(
+                item.Amount,
+                item.Reimbursements.Sum(reimbursement => reimbursement.Amount))),
+            expenses.Take(10).ToList());
     }
 
     public async Task<AllowanceOperationResult> CloseActiveAsync(

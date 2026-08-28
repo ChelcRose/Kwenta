@@ -7,11 +7,15 @@ public static class FinancialCalculations
         decimal income,
         decimal expenses,
         decimal transfersIn,
-        decimal transfersOut) =>
-        startingBalance + income - expenses + transfersIn - transfersOut;
+        decimal transfersOut,
+        decimal reimbursements = 0) =>
+        startingBalance + income - expenses + transfersIn - transfersOut + reimbursements;
 
     public static decimal AmountSaved(decimal income, decimal expenses) =>
         income - expenses;
+
+    public static decimal NetExpense(decimal expense, decimal reimbursements) =>
+        expense - reimbursements;
 
     public static decimal BudgetRemaining(decimal limitAmount, decimal amountSpent) =>
         limitAmount - amountSpent;

@@ -80,6 +80,11 @@ public sealed class TransferService(ApplicationDbContext db)
                 (ids.Contains(transfer.FromAccountId) || ids.Contains(transfer.ToAccountId)))
             .Select(transfer => new { transfer.FromAccountId, transfer.ToAccountId, transfer.Amount })
             .ToListAsync(cancellationToken);
+        var reimbursements = await db.Reimbursements.AsNoTracking()
+            .Where(item => item.UserId == userId && item.ReceivingAccount.UserId == userId &&
+                ids.Contains(item.ReceivingAccountId))
+            .Select(item => new { item.ReceivingAccountId, item.Amount })
+            .ToListAsync(cancellationToken);
 
         return accounts.ToDictionary(account => account.Id, account =>
             FinancialCalculations.AccountBalance(
@@ -87,7 +92,8 @@ public sealed class TransferService(ApplicationDbContext db)
                 transactions.Where(item => item.AccountId == account.Id && item.Type == TransactionType.Income).Sum(item => item.Amount),
                 transactions.Where(item => item.AccountId == account.Id && item.Type == TransactionType.Expense).Sum(item => item.Amount),
                 transfers.Where(item => item.ToAccountId == account.Id).Sum(item => item.Amount),
-                transfers.Where(item => item.FromAccountId == account.Id).Sum(item => item.Amount)));
+                transfers.Where(item => item.FromAccountId == account.Id).Sum(item => item.Amount),
+                reimbursements.Where(item => item.ReceivingAccountId == account.Id).Sum(item => item.Amount)));
     }
 
     private static string FormatPeso(decimal amount) => $"₱{amount:N2}";

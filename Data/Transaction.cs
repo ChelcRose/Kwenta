@@ -27,4 +27,6 @@ public class Transaction
     public int? WeeklyAllowanceId { get; set; }
 
     public WeeklyAllowance? WeeklyAllowance { get; set; }
+
+    public ICollection<Reimbursement> Reimbursements { get; set; } = [];
 }

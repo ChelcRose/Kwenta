@@ -52,6 +52,11 @@ public sealed class AffordabilityAnalysisService(
                 (accountIds.Contains(transfer.FromAccountId) || accountIds.Contains(transfer.ToAccountId)))
             .Select(transfer => new { transfer.FromAccountId, transfer.ToAccountId, transfer.Amount })
             .ToListAsync(cancellationToken);
+        var reimbursements = await db.Reimbursements.AsNoTracking()
+            .Where(item => item.UserId == userId && item.ReceivingAccount.UserId == userId &&
+                accountIds.Contains(item.ReceivingAccountId))
+            .Select(item => new { item.ReceivingAccountId, item.Amount })
+            .ToListAsync(cancellationToken);
 
         var totalAvailableBalance = accounts.Sum(account =>
         {
@@ -71,7 +76,8 @@ public sealed class AffordabilityAnalysisService(
                 accountIncome,
                 accountExpenses,
                 transfers.Where(transfer => transfer.ToAccountId == account.Id).Sum(transfer => transfer.Amount),
-                transfers.Where(transfer => transfer.FromAccountId == account.Id).Sum(transfer => transfer.Amount));
+                transfers.Where(transfer => transfer.FromAccountId == account.Id).Sum(transfer => transfer.Amount),
+                reimbursements.Where(item => item.ReceivingAccountId == account.Id).Sum(item => item.Amount));
         });
 
         var currentMonthTransactions = await db.Transactions

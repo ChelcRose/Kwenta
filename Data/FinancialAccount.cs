@@ -23,4 +23,6 @@ public class FinancialAccount
     public ICollection<Transfer> TransfersOut { get; set; } = [];
 
     public ICollection<Transfer> TransfersIn { get; set; } = [];
+
+    public ICollection<Reimbursement> ReimbursementsReceived { get; set; } = [];
 }

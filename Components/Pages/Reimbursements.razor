@@ -1,0 +1,225 @@
+@page "/reimbursements"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using System.ComponentModel.DataAnnotations
+@using System.Globalization
+@using System.Security.Claims
+@using Kwenta.Data
+@using Kwenta.Services
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Db
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ReimbursementService ReimbursementService
+
+<PageTitle>Reimbursements</PageTitle>
+
+<div class="app-page">
+    <header class="page-header">
+        <div>
+            <h1>Reimbursements</h1>
+            <p class="page-subtitle">Record money repaid to you without counting it as income.</p>
+        </div>
+    </header>
+
+    @if (!string.IsNullOrWhiteSpace(statusError))
+    {
+        <p class="status-message status-error" role="alert">@statusError</p>
+    }
+    @if (!string.IsNullOrWhiteSpace(statusSuccess))
+    {
+        <p class="status-message status-success" role="status">@statusSuccess</p>
+    }
+
+    <EditForm Model="input" OnValidSubmit="SaveReimbursement" FormName="AddReimbursement" class="surface-card form-card">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+        <h2 class="section-heading">Record a reimbursement</h2>
+
+        <div class="form-grid">
+            <div class="form-field">
+                <label for="receiving-account">Receiving account</label>
+                <InputSelect id="receiving-account" @bind-Value="input.ReceivingAccountId">
+                    <option value="">Select an account</option>
+                    @foreach (var account in accounts)
+                    {
+                        <option value="@account.Id">@account.Name</option>
+                    }
+                </InputSelect>
+                <ValidationMessage For="@(() => input.ReceivingAccountId)" />
+            </div>
+            <div class="form-field">
+                <label for="reimbursement-amount">Amount</label>
+                <InputNumber id="reimbursement-amount" @bind-Value="input.Amount" step="0.01" />
+                <ValidationMessage For="@(() => input.Amount)" />
+            </div>
+            <div class="form-field">
+                <label for="reimbursement-date">Date received</label>
+                <InputDate id="reimbursement-date" @bind-Value="input.Date" />
+                <ValidationMessage For="@(() => input.Date)" />
+            </div>
+            <div class="form-field form-field-full">
+                <label for="linked-expense">Original expense (optional)</label>
+                <InputSelect id="linked-expense" @bind-Value="input.ExpenseTransactionId">
+                    <option value="">Not linked to an expense</option>
+                    @foreach (var expense in expenses)
+                    {
+                        <option value="@expense.Id">@FormatDate(expense.Date) · @expense.Merchant · @FormatPeso(expense.Amount) · @expense.FinancialAccount.Name@(expense.WeeklyAllowanceId is not null ? " · Weekly allowance" : "") · @FormatPeso(expense.Outstanding) remaining</option>
+                    }
+                </InputSelect>
+                <p class="muted-text">Linking offsets that expense in weekly allowance spending when applicable.</p>
+            </div>
+            <div class="form-field form-field-full">
+                <label for="reimbursement-description">Description (optional)</label>
+                <InputText id="reimbursement-description" @bind-Value="input.Description" />
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="app-button app-button-primary" disabled="@(isSaving || accounts.Count == 0)">
+                @(isSaving ? "Saving…" : "Record Reimbursement")
+            </button>
+        </div>
+        <p class="muted-text">This increases the receiving account balance but is excluded from income and savings totals.</p>
+    </EditForm>
+
+    <section class="content-section">
+        <div class="section-bar"><h2>Recent reimbursements</h2></div>
+        @if (reimbursements.Count == 0)
+        {
+            <div class="empty-state">No reimbursements recorded yet.</div>
+        }
+        else
+        {
+            <div class="surface-card data-table-wrap">
+                <table class="data-table">
+                    <thead><tr><th>Amount</th><th>Receiving account</th><th>Linked expense</th><th>Date</th><th>Description</th></tr></thead>
+                    <tbody>
+                        @foreach (var reimbursement in reimbursements)
+                        {
+                            <tr>
+                                <td data-label="Amount" class="money-value money-positive">@FormatPeso(reimbursement.Amount)</td>
+                                <td data-label="Receiving account">@reimbursement.ReceivingAccount.Name</td>
+                                <td data-label="Linked expense">@(reimbursement.ExpenseTransaction is null ? "—" : $"{reimbursement.ExpenseTransaction.Merchant} · {FormatPeso(reimbursement.ExpenseTransaction.Amount)}")</td>
+                                <td data-label="Date">@FormatDate(reimbursement.Date)</td>
+                                <td data-label="Description">@(reimbursement.Description ?? "—")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+</div>
+
+@code {
+    [SupplyParameterFromForm(FormName = "AddReimbursement")]
+    private ReimbursementInput input { get; set; } = default!;
+    private List<FinancialAccount> accounts = [];
+    private List<ExpenseOption> expenses = [];
+    private List<Reimbursement> reimbursements = [];
+    private string? statusError;
+    private string? statusSuccess;
+    private bool isSaving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        input ??= NewInput();
+        await LoadPage();
+    }
+
+    private async Task LoadPage()
+    {
+        var userId = await GetUserId();
+        if (userId is null) return;
+
+        accounts = await Db.FinancialAccounts.AsNoTracking()
+            .Where(account => account.UserId == userId && !account.IsArchived)
+            .OrderBy(account => account.Name)
+            .ToListAsync();
+        expenses = await Db.Transactions.AsNoTracking()
+            .Where(transaction => transaction.UserId == userId &&
+                transaction.FinancialAccount.UserId == userId &&
+                transaction.Type == TransactionType.Expense)
+            .Select(transaction => new ExpenseOption(
+                transaction.Id,
+                transaction.Amount,
+                transaction.Date,
+                transaction.Merchant,
+                transaction.FinancialAccount,
+                transaction.WeeklyAllowanceId,
+                transaction.Amount - transaction.Reimbursements.Sum(item => item.Amount)))
+            .Where(expense => expense.Outstanding > 0)
+            .OrderByDescending(expense => expense.Date)
+            .ThenByDescending(expense => expense.Id)
+            .ToListAsync();
+        reimbursements = await Db.Reimbursements.AsNoTracking()
+            .Include(item => item.ReceivingAccount)
+            .Include(item => item.ExpenseTransaction)
+            .Where(item => item.UserId == userId && item.ReceivingAccount.UserId == userId)
+            .OrderByDescending(item => item.Date)
+            .ThenByDescending(item => item.Id)
+            .Take(20)
+            .ToListAsync();
+    }
+
+    private async Task SaveReimbursement()
+    {
+        if (isSaving) return;
+        isSaving = true;
+        statusError = null;
+        statusSuccess = null;
+        try
+        {
+            var userId = await GetUserId();
+            if (userId is null) { statusError = "Please log in again."; return; }
+            var result = await ReimbursementService.CreateAsync(
+                userId,
+                input.ReceivingAccountId!.Value,
+                input.Amount!.Value,
+                input.Date!.Value,
+                input.Description,
+                input.ExpenseTransactionId);
+            if (!result.IsSuccess) { statusError = result.Error; return; }
+
+            statusSuccess = $"Recorded {FormatPeso(input.Amount.Value)} into {result.ReceivingAccountName} without adding income.";
+            input = NewInput();
+            await LoadPage();
+        }
+        finally { isSaving = false; }
+    }
+
+    private async Task<string?> GetUserId()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        return state.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+    }
+
+    private static ReimbursementInput NewInput() => new() { Date = DateOnly.FromDateTime(DateTime.Today) };
+    private static string FormatDate(DateOnly date) => date.ToString("MMM d, yyyy", CultureInfo.GetCultureInfo("en-PH"));
+    private static string FormatPeso(decimal amount) => $"₱{amount.ToString("N2", CultureInfo.GetCultureInfo("en-PH"))}";
+
+    private sealed class ReimbursementInput : IValidatableObject
+    {
+        [Required] public int? ReceivingAccountId { get; set; }
+        [Required, Range(typeof(decimal), "0.01", "999999999999.99")] public decimal? Amount { get; set; }
+        [Required] public DateOnly? Date { get; set; }
+        public int? ExpenseTransactionId { get; set; }
+        public string? Description { get; set; }
+
+        public IEnumerable<ValidationResult> Validate(ValidationContext context)
+        {
+            if (Amount is decimal amount && decimal.Round(amount, 2) != amount)
+                yield return new("Amount can have at most two decimal places.", [nameof(Amount)]);
+        }
+    }
+
+    private sealed record ExpenseOption(
+        int Id,
+        decimal Amount,
+        DateOnly Date,
+        string Merchant,
+        FinancialAccount FinancialAccount,
+        int? WeeklyAllowanceId,
+        decimal Outstanding);
+}

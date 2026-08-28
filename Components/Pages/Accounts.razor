@@ -159,6 +159,11 @@ else
                 (accountIds.Contains(transfer.FromAccountId) || accountIds.Contains(transfer.ToAccountId)))
             .Select(transfer => new { transfer.FromAccountId, transfer.ToAccountId, transfer.Amount })
             .ToListAsync();
+        var reimbursements = await Db.Reimbursements.AsNoTracking()
+            .Where(item => item.UserId == userId && item.ReceivingAccount.UserId == userId &&
+                accountIds.Contains(item.ReceivingAccountId))
+            .Select(item => new { item.ReceivingAccountId, item.Amount })
+            .ToListAsync();
 
         accounts = userAccounts
             .Select(userAccount => new AccountBalance
@@ -179,7 +184,9 @@ else
                     transfers.Where(transfer => transfer.ToAccountId == userAccount.Id)
                         .Sum(transfer => transfer.Amount),
                     transfers.Where(transfer => transfer.FromAccountId == userAccount.Id)
-                        .Sum(transfer => transfer.Amount))
+                        .Sum(transfer => transfer.Amount),
+                    reimbursements.Where(item => item.ReceivingAccountId == userAccount.Id)
+                        .Sum(item => item.Amount))
             })
             .ToList();
     }

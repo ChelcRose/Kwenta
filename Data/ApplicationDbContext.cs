@@ -22,6 +22,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<Transfer> Transfers { get; set; }
 
+    public DbSet<Reimbursement> Reimbursements { get; set; }
+
     public DbSet<ChatConversation> ChatConversations { get; set; }
 
     public DbSet<ChatMessage> ChatMessages { get; set; }
@@ -84,6 +86,21 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
         builder.Entity<Transfer>()
             .HasIndex(transfer => new { transfer.UserId, transfer.Date });
+
+        builder.Entity<Reimbursement>()
+            .HasOne(reimbursement => reimbursement.ReceivingAccount)
+            .WithMany(account => account.ReimbursementsReceived)
+            .HasForeignKey(reimbursement => reimbursement.ReceivingAccountId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.Entity<Reimbursement>()
+            .HasOne(reimbursement => reimbursement.ExpenseTransaction)
+            .WithMany(transaction => transaction.Reimbursements)
+            .HasForeignKey(reimbursement => reimbursement.ExpenseTransactionId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.Entity<Reimbursement>()
+            .HasIndex(reimbursement => new { reimbursement.UserId, reimbursement.Date });
 
         builder.Entity<Transaction>()
             .HasOne(transaction => transaction.Category)

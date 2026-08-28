@@ -116,11 +116,13 @@ else
         "Other"
     ];
 
-    private AccountInput account = new();
+    [SupplyParameterFromForm(FormName = "AddAccount")]
+    private AccountInput account { get; set; } = default!;
     private List<AccountBalance> accounts = [];
 
     protected override async Task OnInitializedAsync()
     {
+        account ??= new AccountInput();
         await LoadAccounts();
     }
 

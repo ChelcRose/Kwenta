@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Kwenta.Components;
@@ -7,6 +8,23 @@ using Kwenta.Data;
 using Kwenta.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+if (int.TryParse(Environment.GetEnvironmentVariable("PORT"), out var port) &&
+    port is > 0 and <= 65535)
+{
+    builder.WebHost.ConfigureKestrel(options => options.ListenAnyIP(port));
+}
+
+if (builder.Environment.IsProduction())
+{
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    {
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedProto |
+            ForwardedHeaders.XForwardedHost;
+        options.KnownNetworks.Clear();
+        options.KnownProxies.Clear();
+    });
+}
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
@@ -60,6 +78,11 @@ builder.Services.AddHttpClient<IFinancialChatAiService, GeminiFinancialChatServi
 });
 
 var app = builder.Build();
+
+if (app.Environment.IsProduction())
+{
+    app.UseForwardedHeaders();
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
